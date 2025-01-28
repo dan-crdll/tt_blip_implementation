@@ -3,7 +3,7 @@ from torch import nn
 import cv2 as cv
 from transformers import BertTokenizerFast, AutoImageProcessor, AutoTokenizer
 
-class DataProcessor():
+class DataProcessor(nn.Module):
     def __init__(self):
         super().__init__()
         
@@ -24,6 +24,22 @@ class DataProcessor():
             text.append(b['text'])
             label.append(1 if b['fake_cls'] == 'orig' else 0)
 
+        vit_img = self.vit_processor(image, return_tensors='pt').pixel_values
+        blip_img = self.blip_img_processor(image, return_tensors='pt').pixel_values
+        blip_txt = self.blip_txt_processor(text, return_tensors='pt', padding=True)
+        bert_txt = self.bert_tokenizer(text, return_tensors='pt', padding=True)
+
+        blip_tokens = blip_txt.input_ids
+        blip_attn = blip_txt.attention_mask
+
+        bert_tokens = bert_txt.input_ids
+        bert_attn = bert_txt.attention_mask
+
+
+        label = torch.tensor(label).unsqueeze(-1).float()
+        return vit_img, blip_img, (blip_tokens, blip_attn), (bert_tokens, bert_attn), label
+    
+    def forward(self, image, text, label):
         vit_img = self.vit_processor(image, return_tensors='pt').pixel_values
         blip_img = self.blip_img_processor(image, return_tensors='pt').pixel_values
         blip_txt = self.blip_txt_processor(text, return_tensors='pt', padding=True)
