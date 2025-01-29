@@ -15,6 +15,9 @@ class TT_Blip(L.LightningModule):
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.accuracy = Accuracy('binary')
 
+        self.training_step_last_loss = 100
+        self.validation_step_last_loss = 100
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), 1e-3, weight_decay=1e-5)
     
@@ -25,23 +28,34 @@ class TT_Blip(L.LightningModule):
         return y 
     
     def training_step(self, batch):
-        vi, bi, (bt, ba), (bet, bea), y = batch
-        pred = self.forward(vi, bi, bt, ba, bet, bea)
+        try:
+            vi, bi, (bt, ba), (bet, bea), y = batch
+            pred = self.forward(vi, bi, bt, ba, bet, bea)
 
-        loss = self.loss_fn(pred, y)
-        acc = self.accuracy(pred, y)
+            loss = self.loss_fn(pred, y)
+            acc = self.accuracy(pred, y)
 
-        self.log("train_loss", loss, prog_bar=True)
-        self.log('train_acc', acc, prog_bar=True, on_step=False, on_epoch=True)
-        return loss 
+            self.log("train_loss", loss, prog_bar=True)
+            self.log('train_acc', acc, prog_bar=True, on_step=False, on_epoch=True)
+
+            self.training_step_last_loss = loss
+            return loss 
+        except:
+            print(batch)
+            return self.training_step_last_loss
     
     def validation_step(self, batch):
-        vi, bi, (bt, ba), (bet, bea), y = batch
-        pred = self.forward(vi, bi, bt, ba, bet, bea)
+        try:
+            vi, bi, (bt, ba), (bet, bea), y = batch
+            pred = self.forward(vi, bi, bt, ba, bet, bea)
 
-        loss = self.loss_fn(pred, y)
-        acc = self.accuracy(pred, y)
+            loss = self.loss_fn(pred, y)
+            acc = self.accuracy(pred, y)
 
-        self.log("val_loss", loss, prog_bar=True)
-        self.log('val_acc', acc, prog_bar=True)
-        return loss 
+            self.log("val_loss", loss, prog_bar=True)
+            self.log('val_acc', acc, prog_bar=True)
+
+            self.validation_step_last_loss = loss
+            return loss 
+        except:
+            return self.validation_step_last_loss
