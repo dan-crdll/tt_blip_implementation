@@ -13,9 +13,10 @@
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
+BLIP/
 # Mono auto generated files
 mono_crash.*
-
+data/
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
