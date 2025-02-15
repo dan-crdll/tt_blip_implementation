@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from transformers import AutoModelForImageClassification, AutoModelForTextEncoding, AutoModelForImageTextToText
 import lightning as L
+from torchmetrics import Accuracy
 
 
 class FeatureExtractionLayer(nn.Module):
@@ -24,11 +25,29 @@ class FeatureExtractionLayer(nn.Module):
         self.projector_txt = nn.LazyLinear(embed_dim)
         self.projector_multi = nn.LazyLinear(embed_dim)
 
-        self.vit_s.train()
-        self.bert.train()
-        self.blip.train()
-        self.blip_img.train()
-        self.blip_txt.train()
+        # Freeze all layers
+        for param in self.vit_s.parameters():
+            param.requires_grad = False
+        for param in self.bert.parameters():
+            param.requires_grad = False
+        for param in self.blip.parameters():
+            param.requires_grad = False
+        for param in self.blip_img.parameters():
+            param.requires_grad = False
+        for param in self.blip_txt.parameters():
+            param.requires_grad = False
+
+        # Unfreeze the last three layers
+        for param in list(self.vit_s.parameters())[-3:]:
+            param.requires_grad = True
+        for param in list(self.bert.parameters())[-3:]:
+            param.requires_grad = True
+        for param in list(self.blip.parameters())[-3:]:
+            param.requires_grad = True
+        for param in list(self.blip_img.parameters())[-3:]:
+            param.requires_grad = True
+        for param in list(self.blip_txt.parameters())[-3:]:
+            param.requires_grad = True
 
     def forward(self, blip_pixel_values, blip_input_ids, blip_attn_mask, 
                 vit_pixel_values, bert_input_ids, bert_attn_mask):
@@ -116,6 +135,7 @@ class TT_BLIP_Model(L.LightningModule):
         self.fusion_layer = FusionLayer(embed_dim, num_heads)
         self.classification_layer = ClassificationLayer(embed_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
+        self.acc_fn = Accuracy('binary')
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-3)
@@ -130,12 +150,18 @@ class TT_BLIP_Model(L.LightningModule):
         x, y = batch 
         pred = self.forward(x)
         loss = self.loss_fn(pred, y)
+        acc = self.acc_fn(pred, y)
+
         self.log("train_loss", loss)
+        self.log("train_acc", acc)
         return loss 
     
     def validation_step(self, batch):
         x, y = batch 
         pred = self.forward(x)
         loss = self.loss_fn(pred, y)
+        acc = self.acc_fn(pred, y)
+
         self.log("val_loss", loss)
+        self.log("val_acc", acc)
         return loss 
