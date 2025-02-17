@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from transformers import AutoModelForImageClassification, AutoModelForTextEncoding, AutoModelForImageTextToText
 import lightning as L
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, F1Score, Precision, Recall
 
 
 class FeatureExtractionLayer(nn.Module):
@@ -13,9 +13,9 @@ class FeatureExtractionLayer(nn.Module):
         self.vit_projector = nn.Linear(384, 768)
         self.bert = AutoModelForTextEncoding.from_pretrained("google-bert/bert-base-uncased")
         
-        self.blip_img = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-itm-base-coco")
-        self.blip_txt = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-itm-base-coco")
-        self.blip = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-itm-base-coco")
+        self.blip_img = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
+        self.blip_txt = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
+        self.blip = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
 
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
         self.empty_txt = nn.Parameter(empty_txt, requires_grad=False)
@@ -25,29 +25,37 @@ class FeatureExtractionLayer(nn.Module):
         self.projector_txt = nn.LazyLinear(embed_dim)
         self.projector_multi = nn.LazyLinear(embed_dim)
 
-        # Freeze all layers
         for param in self.vit_s.parameters():
             param.requires_grad = False
+        for param in self.vit_s.encoder.layer[-1].parameters():
+            param.requires_grad = True
+
         for param in self.bert.parameters():
             param.requires_grad = False
+        for param in self.bert.encoder.layer[-1].parameters():
+            param.requires_grad = True
+
         for param in self.blip.parameters():
             param.requires_grad = False
+        for param in self.blip.vision_model.encoder.layers[-1].parameters():
+            param.requires_grad = True
+        for param in self.blip.text_decoder.bert.encoder.layer[-1].parameters():
+            param.requires_grad = True
+
         for param in self.blip_img.parameters():
             param.requires_grad = False
+        for param in self.blip_img.vision_model.encoder.layers[-1].parameters():
+            param.requires_grad = True
+        for param in self.blip_img.text_decoder.bert.encoder.layer[-1].parameters():
+            param.requires_grad = True
+
         for param in self.blip_txt.parameters():
             param.requires_grad = False
+        for param in self.blip_txt.vision_model.encoder.layers[-1].parameters():
+            param.requires_grad = True
+        for param in self.blip_txt.text_decoder.bert.encoder.layer[-1].parameters():
+            param.requires_grad = True
 
-        # Unfreeze the last three layers
-        for param in list(self.vit_s.parameters())[-3:]:
-            param.requires_grad = True
-        for param in list(self.bert.parameters())[-3:]:
-            param.requires_grad = True
-        for param in list(self.blip.parameters())[-3:]:
-            param.requires_grad = True
-        for param in list(self.blip_img.parameters())[-3:]:
-            param.requires_grad = True
-        for param in list(self.blip_txt.parameters())[-3:]:
-            param.requires_grad = True
 
     def forward(self, blip_pixel_values, blip_input_ids, blip_attn_mask, 
                 vit_pixel_values, bert_input_ids, bert_attn_mask):
@@ -136,6 +144,9 @@ class TT_BLIP_Model(L.LightningModule):
         self.classification_layer = ClassificationLayer(embed_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn = Accuracy('binary')
+        self.f1_fn = F1Score('binary')
+        self.prec_fn = Precision('binary')
+        self.recall_fn = Recall('binary')
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-3)
@@ -152,8 +163,16 @@ class TT_BLIP_Model(L.LightningModule):
         loss = self.loss_fn(pred, y)
         acc = self.acc_fn(pred, y)
 
-        self.log("train_loss", loss)
-        self.log("train_acc", acc)
+        f1 = self.f1_fn(pred, y)
+        prec = self.prec_fn(pred, y)
+        rec = self.recall_fn(pred, y)
+
+        self.log("train_loss", loss, on_epoch=True, on_step=False)
+        self.log("train_acc", acc, on_epoch=True, on_step=False)
+
+        self.log("train_prec", prec, on_epoch=True, on_step=False)
+        self.log("train_rec", rec, on_epoch=True, on_step=False)
+        self.log("train_f1", f1, on_epoch=True, on_step=False)
         return loss 
     
     def validation_step(self, batch):
@@ -162,6 +181,14 @@ class TT_BLIP_Model(L.LightningModule):
         loss = self.loss_fn(pred, y)
         acc = self.acc_fn(pred, y)
 
+        f1 = self.f1_fn(pred, y)
+        prec = self.prec_fn(pred, y)
+        rec = self.recall_fn(pred, y)
+
         self.log("val_loss", loss)
         self.log("val_acc", acc)
+
+        self.log("val_prec", prec, on_epoch=True, on_step=False)
+        self.log("val_rec", rec, on_epoch=True, on_step=False)
+        self.log("val_f1", f1, on_epoch=True, on_step=False)
         return loss 
