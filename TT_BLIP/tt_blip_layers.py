@@ -149,7 +149,7 @@ class TT_BLIP_Model(L.LightningModule):
         self.recall_fn = Recall('binary')
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=1e-3)
+        return torch.optim.Adam(self.parameters(), lr=1e-3)
     
     def forward(self, x):
         z = self.feature_extraction_layer(*x)

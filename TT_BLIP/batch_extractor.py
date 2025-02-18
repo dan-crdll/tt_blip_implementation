@@ -8,15 +8,18 @@ from PIL import Image
 import json
 
 class DatasetLoader:
-    def __init__(self, data_dir='./data/gossipcop', batch_size=8, train_ratio=0.8):
+    def __init__(self, data_dir='./data/gossipcop', batch_size=8, train_ratio=0.8, balance=False):
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.train_ratio = train_ratio
         self.dp = DataPreprocessor()
-        self.train_dataset, self.test_dataset = self.create_datasets()
+        self.train_dataset, self.test_dataset = self.create_datasets(balance)
 
-    def create_datasets(self):
-        fake_idxs = torch.arange(0, len(os.listdir(f'{self.data_dir}/fake/img'))).unsqueeze(-1)
+    def create_datasets(self, balance):
+        if balance:
+            fake_idxs = torch.arange(0, len(os.listdir(f'{self.data_dir}/real/img'))).unsqueeze(-1)
+        else:
+            fake_idxs = torch.arange(0, len(os.listdir(f'{self.data_dir}/fake/img'))).unsqueeze(-1)
         true_idxs = torch.arange(0, len(os.listdir(f'{self.data_dir}/real/img'))).unsqueeze(-1)
 
         fake_idxs = torch.cat([fake_idxs, torch.zeros_like(fake_idxs)], -1)
