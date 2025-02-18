@@ -13,9 +13,16 @@ class FeatureExtractionLayer(nn.Module):
         self.vit_projector = nn.Linear(384, 768)
         self.bert = AutoModelForTextEncoding.from_pretrained("google-bert/bert-base-uncased")
         
+        self.vit_s.train()
+        self.bert.train()
+
         self.blip_img = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
         self.blip_txt = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
         self.blip = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
+
+        self.blip.train()
+        self.blip_img.train()
+        self.blip_txt.train()
 
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
         self.empty_txt = nn.Parameter(empty_txt, requires_grad=False)
@@ -27,33 +34,33 @@ class FeatureExtractionLayer(nn.Module):
 
         for param in self.vit_s.parameters():
             param.requires_grad = False
-        for param in self.vit_s.encoder.layer[-1].parameters():
+        for param in self.vit_s.encoder.layer[-5:].parameters():
             param.requires_grad = True
 
         for param in self.bert.parameters():
             param.requires_grad = False
-        for param in self.bert.encoder.layer[-1].parameters():
+        for param in self.bert.encoder.layer[-5:].parameters():
             param.requires_grad = True
 
         for param in self.blip.parameters():
             param.requires_grad = False
-        for param in self.blip.vision_model.encoder.layers[-1].parameters():
+        for param in self.blip.vision_model.encoder.layers[-5:].parameters():
             param.requires_grad = True
-        for param in self.blip.text_decoder.bert.encoder.layer[-1].parameters():
+        for param in self.blip.text_decoder.bert.encoder.layer[-5:].parameters():
             param.requires_grad = True
 
         for param in self.blip_img.parameters():
             param.requires_grad = False
-        for param in self.blip_img.vision_model.encoder.layers[-1].parameters():
+        for param in self.blip_img.vision_model.encoder.layers[-5:].parameters():
             param.requires_grad = True
-        for param in self.blip_img.text_decoder.bert.encoder.layer[-1].parameters():
+        for param in self.blip_img.text_decoder.bert.encoder.layer[-5:].parameters():
             param.requires_grad = True
 
         for param in self.blip_txt.parameters():
             param.requires_grad = False
-        for param in self.blip_txt.vision_model.encoder.layers[-1].parameters():
+        for param in self.blip_txt.vision_model.encoder.layers[-5:].parameters():
             param.requires_grad = True
-        for param in self.blip_txt.text_decoder.bert.encoder.layer[-1].parameters():
+        for param in self.blip_txt.text_decoder.bert.encoder.layer[-5:].parameters():
             param.requires_grad = True
 
 
@@ -149,7 +156,7 @@ class TT_BLIP_Model(L.LightningModule):
         self.recall_fn = Recall('binary')
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
+        return torch.optim.AdamW(self.parameters(), lr=1e-3)
     
     def forward(self, x):
         z = self.feature_extraction_layer(*x)
@@ -167,8 +174,8 @@ class TT_BLIP_Model(L.LightningModule):
         prec = self.prec_fn(pred, y)
         rec = self.recall_fn(pred, y)
 
-        self.log("train_loss", loss, on_epoch=True, on_step=False)
-        self.log("train_acc", acc, on_epoch=True, on_step=False)
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True, on_step=False)
+        self.log("train_acc", acc, prog_bar=True, on_epoch=True, on_step=False)
 
         self.log("train_prec", prec, on_epoch=True, on_step=False)
         self.log("train_rec", rec, on_epoch=True, on_step=False)
@@ -185,8 +192,8 @@ class TT_BLIP_Model(L.LightningModule):
         prec = self.prec_fn(pred, y)
         rec = self.recall_fn(pred, y)
 
-        self.log("val_loss", loss)
-        self.log("val_acc", acc)
+        self.log("val_loss", loss, prog_bar=True)
+        self.log("val_acc", acc, prog_bar=True)
 
         self.log("val_prec", prec, on_epoch=True, on_step=False)
         self.log("val_rec", rec, on_epoch=True, on_step=False)

@@ -5,7 +5,7 @@ from lightning.pytorch.loggers import WandbLogger
 
 
 
-ds_loader = DatasetLoader(batch_size=64, balance=True)
+ds_loader = DatasetLoader(batch_size=8, balance=True)
 train_dl, val_dl = ds_loader.get_dataloaders()
 
 ds = ds_loader.train_dataset
@@ -41,5 +41,5 @@ model = TT_BLIP_Model(
     )
 
 logger = WandbLogger('TT_BLIP_gossipcop_balanced_final', project="Thesis_New")
-trainer = Trainer(max_epochs=50, logger=logger, log_every_n_steps=1)
+trainer = Trainer(max_epochs=50, logger=logger, log_every_n_steps=1, accumulate_grad_batches=8)
 trainer.fit(model, train_dl, val_dl)
