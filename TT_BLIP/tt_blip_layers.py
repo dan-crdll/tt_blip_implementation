@@ -131,8 +131,10 @@ class ClassificationLayer(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
+            nn.BatchNorm1d(embed_dim),
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
+            nn.BatchNorm1d(embed_dim),
             nn.Linear(embed_dim, 1)
         )
 
