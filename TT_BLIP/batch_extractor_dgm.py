@@ -31,7 +31,7 @@ class DatasetLoader:
 
         for el in ds:
             if (el['image'].split('/')[2] == 'bbc') or (el['image'].split('/')[2] == 'simswap'):
-                train_dataset.append({
+                test_dataset.append({
                     'text': el['text'],
                     'image': el['image'],
                     'fake_cls': el['fake_cls']
