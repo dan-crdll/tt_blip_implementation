@@ -12,6 +12,7 @@ class DatasetLoader:
     def __init__(self, batch_size=8):
         self.dp = DataPreprocessor()
         self.train_dataset, self.test_dataset = self.create_datasets()
+        self.batch_size = batch_size
 
     def create_datasets(self):
         train_dataset = load_dataset("rshaojimmy/DGM4", split='train')
