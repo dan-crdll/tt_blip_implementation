@@ -15,8 +15,27 @@ class DatasetLoader:
         self.batch_size = batch_size
 
     def create_datasets(self):
-        train_dataset = load_dataset("rshaojimmy/DGM4", split='train')
-        test_dataset = load_dataset("rshaojimmy/DGM4", split='validation')
+        train_dataset = []
+        test_dataset = []
+        ds = load_dataset("rshaojimmy/DGM4", split='train')
+
+        for el in ds:
+            if (el['image'].split('/')[2] == 'bbc') or (el['image'].split('/')[2] == 'simswap'):
+                train_dataset.append({
+                    'text': el['text'],
+                    'image': el['image'],
+                    'fake_cls': el['fake_cls']
+                })
+            
+        ds = load_dataset("rshaojimmy/DGM4", split='validation')
+
+        for el in ds:
+            if (el['image'].split('/')[2] == 'bbc') or (el['image'].split('/')[2] == 'simswap'):
+                train_dataset.append({
+                    'text': el['text'],
+                    'image': el['image'],
+                    'fake_cls': el['fake_cls']
+                })
         return train_dataset, test_dataset
 
     def collate_fn(self, batch):
