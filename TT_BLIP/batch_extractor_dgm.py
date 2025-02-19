@@ -50,10 +50,11 @@ class DatasetLoader:
             labels.append(1 if b['fake_cls'] == 'orig' else 0)
 
         x = self.dp(images, texts)
+        labels = torch.tensor(labels)
         y = labels.to(torch.float)
         return x, y
 
     def get_dataloaders(self):
-        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn)
-        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn)
+        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
+        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
         return train_loader, test_loader

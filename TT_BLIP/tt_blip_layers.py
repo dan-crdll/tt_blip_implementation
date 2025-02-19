@@ -22,7 +22,8 @@ class FeatureExtractionLayer(nn.Module):
 
         self.cls_multi = nn.Parameter(torch.randn((1, 1, 768)))
 
-        self.initialize_training_mode(trainable)
+        if trainable != 0:
+            self.initialize_training_mode(trainable)
 
     def initialize_training_mode(self, trainable):
         trainable_layers = self.blip.text_encoder.encoder.layer[:]
