@@ -47,7 +47,7 @@ class DatasetLoader:
             path_img = f"{self.data_dir}/{'fake' if labels[i] == 0 else 'real'}/img/{idx}.jpg"
             path_txt = f"{self.data_dir}/{'fake' if labels[i] == 0 else 'real'}/text/{idx}.json"
 
-            images.append(Image.open(path_img))
+            images.append(Image.open(path_img).convert('RGB'))
             with open(path_txt, 'r') as fp:
                 texts.append(json.load(fp)['text'])
         x = self.dp(images, texts)

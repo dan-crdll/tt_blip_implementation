@@ -36,10 +36,10 @@ model = TT_BLIP_Model(
         ds_loader.dp.empty_pixel_values, 
         ds_loader.dp.empty_input_ids,
         ds_loader.dp.empty_attn_mask, 
-        1024, 
+        768, 
         8
     )
 
-logger = WandbLogger('TT_BLIP_gossipcop_balanced_final', project="Thesis_New")
+logger = WandbLogger('TT_BLIP_gossipcop', project="Thesis_New")
 trainer = Trainer(max_epochs=50, logger=logger, log_every_n_steps=1, accumulate_grad_batches=8)
 trainer.fit(model, train_dl, val_dl)

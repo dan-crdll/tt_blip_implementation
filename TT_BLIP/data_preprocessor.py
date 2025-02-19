@@ -1,6 +1,6 @@
 import torch 
 from torch import nn 
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import ViTImageProcessor, BertTokenizer, BlipProcessor
 from PIL import Image
 import json
 
@@ -8,26 +8,25 @@ import json
 class DataPreprocessor():
     def __init__(self):
         # BLIP preprocessing utils
-        self.blip_processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        self.blip_tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip-image-captioning-base")
+        self.blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
-        self.empty_pixel_values = self.blip_processor(torch.zeros((3, 256, 256)), return_tensors='pt')['pixel_values']
-        empty_txt = self.blip_tokenizer(["no text"], return_tensors='pt')
-        self.empty_input_ids = empty_txt['input_ids']
-        self.empty_attn_mask = empty_txt['attention_mask']
+        empty = self.blip_processor(torch.zeros((3, 224, 224)), [""], return_tensors='pt')
+        self.empty_pixel_values = empty['pixel_values']
+        self.empty_input_ids = empty['input_ids']
+        self.empty_attn_mask = empty['attention_mask']
 
         # ViT preprocessing utils
-        self.vit_processor = AutoProcessor.from_pretrained("WinKawaks/vit-small-patch16-224", use_fast = True)
+        self.vit_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224", use_fast = True)
 
         # BERT preprocessing utils
-        self.bert_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        self.bert_tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 
     def __call__(self, images, texts):
         # BLIP input extraction
-        blip_tokens = self.blip_tokenizer(texts, return_tensors='pt', padding=True, truncation=True)
+        blip_tokens = self.blip_processor(images, texts, return_tensors='pt', padding=True, truncation=True)
 
-        blip_pixel_values = self.blip_processor(images, return_tensors='pt')['pixel_values']
+        blip_pixel_values = blip_tokens['pixel_values']
         blip_input_ids = blip_tokens['input_ids']
         blip_attn_mask = blip_tokens['attention_mask']
 

@@ -1,68 +1,69 @@
 import torch 
 from torch import nn
-from transformers import AutoModelForImageClassification, AutoModelForTextEncoding, AutoModelForImageTextToText
+from transformers import ViTForImageClassification, BertModel, BlipForImageTextRetrieval
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 
 
 class FeatureExtractionLayer(nn.Module):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim):
+    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, trainable):
         super().__init__()
 
-        self.vit_s = AutoModelForImageClassification.from_pretrained("WinKawaks/vit-small-patch16-224").vit
-        self.vit_projector = nn.Linear(384, 768)
-        self.bert = AutoModelForTextEncoding.from_pretrained("google-bert/bert-base-uncased")
-        
-        self.vit_s.train()
-        self.bert.train()
+        self.vit = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").vit
+        self.bert = BertModel.from_pretrained("google-bert/bert-base-uncased")      
 
-        self.blip_img = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
-        self.blip_txt = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
-        self.blip = AutoModelForImageTextToText.from_pretrained("Salesforce/blip-image-captioning-base")
-
-        self.blip.train()
-        self.blip_img.train()
-        self.blip_txt.train()
+        self.blip_img = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        self.blip_txt = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        self.blip = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
 
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
         self.empty_txt = nn.Parameter(empty_txt, requires_grad=False)
         self.empty_attn_mask = nn.Parameter(empty_attn_mask, requires_grad=False)
 
-        self.projector_img = nn.LazyLinear(embed_dim)
-        self.projector_txt = nn.LazyLinear(embed_dim)
-        self.projector_multi = nn.LazyLinear(embed_dim)
+        self.cls_multi = nn.Parameter(torch.randn((1, 1, 768)))
 
-        for param in self.vit_s.parameters():
-            param.requires_grad = False
-        for param in self.vit_s.encoder.layer[-5:].parameters():
-            param.requires_grad = True
+        self.initialize_training_mode(trainable)
 
-        for param in self.bert.parameters():
-            param.requires_grad = False
-        for param in self.bert.encoder.layer[-5:].parameters():
-            param.requires_grad = True
-
+    def initialize_training_mode(self, trainable):
+        trainable_layers = self.blip.text_encoder.encoder.layer[:]
         for param in self.blip.parameters():
             param.requires_grad = False
-        for param in self.blip.vision_model.encoder.layers[-5:].parameters():
-            param.requires_grad = True
-        for param in self.blip.text_decoder.bert.encoder.layer[-5:].parameters():
-            param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
 
+        trainable_layers = self.blip_img.text_encoder.encoder.layer[:]
         for param in self.blip_img.parameters():
             param.requires_grad = False
-        for param in self.blip_img.vision_model.encoder.layers[-5:].parameters():
-            param.requires_grad = True
-        for param in self.blip_img.text_decoder.bert.encoder.layer[-5:].parameters():
-            param.requires_grad = True
-
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
+            
+        trainable_layers = self.blip_txt.text_encoder.encoder.layer[:]
         for param in self.blip_txt.parameters():
             param.requires_grad = False
-        for param in self.blip_txt.vision_model.encoder.layers[-5:].parameters():
-            param.requires_grad = True
-        for param in self.blip_txt.text_decoder.bert.encoder.layer[-5:].parameters():
-            param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
 
+        trainable_layers = self.vit.encoder.layer[trainable:]
+        for param in self.vit.parameters():
+            param.requires_grad = False
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
+
+        trainable_layers = self.bert.encoder.layer[trainable:]
+        for param in self.vit.parameters():
+            param.requires_grad = False
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
+        
+                
 
     def forward(self, blip_pixel_values, blip_input_ids, blip_attn_mask, 
                 vit_pixel_values, bert_input_ids, bert_attn_mask):
@@ -72,13 +73,23 @@ class FeatureExtractionLayer(nn.Module):
         empty_img = self.empty_img.repeat(BSZ, 1, 1, 1)
         empty_txt = self.empty_txt.repeat(BSZ, 1)
         empty_attn_mask = self.empty_attn_mask.repeat(BSZ, 1)
+        cls_multi = self.cls_multi.repeat(BSZ, 1, 1)
 
         # multi-modality feature extraction
-        vit_encodings = self.vit_s(pixel_values=vit_pixel_values).last_hidden_state
-        vit_encodings = self.vit_projector(vit_encodings)
+        """
+        ViT Last hidden state has dimension BSZ x 197 x 768 , can try taking only 
+        classifier token
+        """
+        vit_encodings = self.vit(pixel_values=vit_pixel_values).last_hidden_state[:, 0].unsqueeze(1)
 
-        bert_encodings = self.bert(input_ids=bert_input_ids, attention_mask=bert_attn_mask).last_hidden_state
+        """
+        BERT Last hidden state has dimension BSZ x N + 1 x 768, can try taking only classifier token
+        """
+        bert_encodings = self.bert(input_ids=bert_input_ids, attention_mask=bert_attn_mask).last_hidden_state[:, 0].unsqueeze(1)
 
+        """
+        BLIP encodings have dimension BSZ x 577 x 768
+        """
         blip_i_encodings = self.blip_img(
             pixel_values=blip_pixel_values,
             input_ids=empty_txt,
@@ -95,35 +106,34 @@ class FeatureExtractionLayer(nn.Module):
             attention_mask=blip_attn_mask
         ).last_hidden_state
 
-        # feature concatenation
-        image_feature = self.projector_img(torch.cat([vit_encodings, blip_i_encodings], 1))
-        text_feature = self.projector_txt(torch.cat([bert_encodings, blip_t_encodings], 1))
-        multimodal_feature = self.projector_multi(blip_encodings)
-        return image_feature, text_feature, multimodal_feature
+        """
+        Feature concatenation
+        """
+        image_feature = torch.cat([vit_encodings, blip_i_encodings], 1)
+        txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1)
+        multimodal_feature = torch.cat([cls_multi, blip_encodings], 1)
+
+        # They all have dim BSZ x 578 x 768 with cls token
+        return image_feature, txt_feature, multimodal_feature
 
 
 class FusionLayer(nn.Module):
     def __init__(self, embed_dim, num_heads):
         super().__init__()
-        self.mha_layers = nn.ModuleList([
-            nn.MultiheadAttention(embed_dim, num_heads, batch_first=True) for _ in range(3)
-        ])
-        self.mlp_layers = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(embed_dim, embed_dim),
-                nn.ReLU(),
-                nn.Linear(embed_dim, embed_dim),
-                nn.ReLU()
-            ) for _ in range(3)
-        ])
+        self.cross_attn_i = nn.Transformer(embed_dim, num_heads, batch_first=True)
+        self.cross_attn_m = nn.Transformer(embed_dim, num_heads, batch_first=True)
+        self_attn_layer = nn.TransformerEncoderLayer(embed_dim, num_heads, batch_first=True)
+        self.self_attn_t = nn.TransformerEncoder(self_attn_layer, 6)
 
     def forward(self, z):
-        z = list(z)
-        for i in range(3):
-            z[i], _ = self.mha_layers[i](z[1], z[i], z[i])
-            z[i] = self.mlp_layers[i](z[i])
-        z = torch.cat(z, 1)
-        return z # BSZ x N x EMBED_DIM
+        z_i, z_t, z_m = z
+
+        z_i = self.cross_attn_i(z_i, z_t)[:, 0].unsqueeze(1)
+        z_m = self.cross_attn_m(z_m, z_t)[:, 0].unsqueeze(1)
+        z_t = self.self_attn_t(z_t)[:, 0].unsqueeze(1)
+
+        z = torch.cat([z_i, z_m, z_t], 1)
+        return z # BSZ x 3 x EMBED_DIM
     
 class ClassificationLayer(nn.Module):
     def __init__(self, embed_dim):
@@ -146,9 +156,9 @@ class ClassificationLayer(nn.Module):
 
 
 class TT_BLIP_Model(L.LightningModule):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads):
+    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, trainable=-3):
         super().__init__()
-        self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, embed_dim)
+        self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, embed_dim, trainable)
         self.fusion_layer = FusionLayer(embed_dim, num_heads)
         self.classification_layer = ClassificationLayer(embed_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
