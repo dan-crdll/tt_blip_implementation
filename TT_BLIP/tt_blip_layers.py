@@ -50,16 +50,16 @@ class FeatureExtractionLayer(nn.Module):
         trainable_layers = self.vit.encoder.layer[trainable:]
         for param in self.vit.parameters():
             param.requires_grad = False
-        # for layer in trainable_layers:
-        #     for param in layer.parameters():
-        #         param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
 
         trainable_layers = self.bert.encoder.layer[trainable:]
         for param in self.vit.parameters():
             param.requires_grad = False
-        # for layer in trainable_layers:
-        #     for param in layer.parameters():
-        #         param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
         
                 
 
@@ -209,8 +209,8 @@ class TT_BLIP_Model(L.LightningModule):
         prec = self.prec_fn(pred, y)
         rec = self.recall_fn(pred, y)
 
-        self.log("train_loss", loss, prog_bar=True, on_epoch=True, on_step=False)
-        self.log("train_acc", acc, prog_bar=True, on_epoch=True, on_step=False)
+        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_acc", acc, prog_bar=True)
 
         self.log("train_prec", prec, on_epoch=True, on_step=False)
         self.log("train_rec", rec, on_epoch=True, on_step=False)
