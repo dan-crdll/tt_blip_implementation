@@ -57,6 +57,6 @@ class DatasetLoader:
         return x, y
 
     def get_dataloaders(self):
-        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True, num_workers=multiprocessing.cpu_count // 2)
-        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True, num_workers=multiprocessing.cpu_count // 2)
+        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
+        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
         return train_loader, test_loader

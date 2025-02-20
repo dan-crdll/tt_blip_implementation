@@ -26,26 +26,26 @@ class FeatureExtractionLayer(nn.Module):
         trainable_layers = self.blip.text_encoder.encoder.layer[trainable:]
         for param in self.blip.parameters():
             param.requires_grad = False
-        # for layer in trainable_layers:
-        #     for param in layer.parameters():
-        #         if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-        #             param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
 
         trainable_layers = self.blip_img.text_encoder.encoder.layer[trainable:]
         for param in self.blip_img.parameters():
             param.requires_grad = False
-        # for layer in trainable_layers:
-        #     for param in layer.parameters():
-        #         if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-        #             param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
             
         trainable_layers = self.blip_txt.text_encoder.encoder.layer[trainable:]
         for param in self.blip_txt.parameters():
             param.requires_grad = False
-        # for layer in trainable_layers:
-        #     for param in layer.parameters():
-        #         if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-        #             param.requires_grad = True
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
 
         trainable_layers = self.vit.encoder.layer[trainable:]
         for param in self.vit.parameters():
@@ -201,6 +201,8 @@ class TT_BLIP_Model(L.LightningModule):
         x, y = batch 
         pred = self.forward(x)
         loss = self.loss_fn(pred, y)
+
+        pred = nn.functional.sigmoid(pred)
         acc = self.acc_fn(pred, y)
 
         f1 = self.f1_fn(pred, y)
@@ -219,6 +221,8 @@ class TT_BLIP_Model(L.LightningModule):
         x, y = batch 
         pred = self.forward(x)
         loss = self.loss_fn(pred, y)
+
+        pred = nn.functional.sigmoid(pred)
         acc = self.acc_fn(pred, y)
 
         f1 = self.f1_fn(pred, y)

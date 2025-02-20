@@ -130,4 +130,4 @@ with open(path, 'wb') as fp:
         fp.write(chunk)
 
 with zipfile.ZipFile(path, "r") as zp:
-    zp.extractall('./')
+    zp.extractall('./data')
