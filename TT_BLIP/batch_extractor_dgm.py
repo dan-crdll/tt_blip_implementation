@@ -20,7 +20,7 @@ class DatasetLoader:
         ds = load_dataset("rshaojimmy/DGM4", split='train')
 
         for el in ds:
-            if (el['image'].split('/')[2] == 'bbc') or (el['image'].split('/')[2] == 'simswap'):
+            if (el['image'].split('/')[2] == 'washington_post') or (el['image'].split('/')[2] == 'simswap'):
                 train_dataset.append({
                     'text': el['text'],
                     'image': el['image'],
@@ -30,7 +30,7 @@ class DatasetLoader:
         ds = load_dataset("rshaojimmy/DGM4", split='validation')
 
         for el in ds:
-            if (el['image'].split('/')[2] == 'bbc') or (el['image'].split('/')[2] == 'simswap'):
+            if (el['image'].split('/')[2] == 'washington_post') or (el['image'].split('/')[2] == 'simswap'):
                 test_dataset.append({
                     'text': el['text'],
                     'image': el['image'],
