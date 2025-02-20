@@ -7,6 +7,8 @@ import torch
 from PIL import Image
 import json
 from datasets import load_dataset
+import multiprocessing
+
 
 class DatasetLoader:
     def __init__(self, batch_size=8):
@@ -55,6 +57,6 @@ class DatasetLoader:
         return x, y
 
     def get_dataloaders(self):
-        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
-        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
+        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True, num_workers=multiprocessing.cpu_count // 2)
+        test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True, num_workers=multiprocessing.cpu_count // 2)
         return train_loader, test_loader
