@@ -2,19 +2,18 @@ import sys
 sys.path.append('.')
 from torch.utils.data import DataLoader
 from TT_BLIP.data_preprocessor import DataPreprocessor
-import os 
 import torch
 from PIL import Image
-import json
 from datasets import load_dataset
-import multiprocessing
+
 
 
 class DatasetLoader:
-    def __init__(self, batch_size=8):
+    def __init__(self, allowed_splits=['washington_post', 'simswap', 'StyleCLIP', 'bbc'], batch_size=8):
         self.dp = DataPreprocessor()
         self.train_dataset, self.test_dataset = self.create_datasets()
         self.batch_size = batch_size
+        self.allowed_splits = allowed_splits
 
     def create_datasets(self):
         train_dataset = []
@@ -22,7 +21,7 @@ class DatasetLoader:
         ds = load_dataset("rshaojimmy/DGM4", split='train')
 
         for el in ds:
-            if (el['image'].split('/')[2] == 'washington_post') or (el['image'].split('/')[2] == 'simswap'):
+            if (el['image'].split('/')[2] in self.allowed_splits):
                 train_dataset.append({
                     'text': el['text'],
                     'image': el['image'],
@@ -32,7 +31,7 @@ class DatasetLoader:
         ds = load_dataset("rshaojimmy/DGM4", split='validation')
 
         for el in ds:
-            if (el['image'].split('/')[2] == 'washington_post') or (el['image'].split('/')[2] == 'simswap'):
+            if (el['image'].split('/')[2] in self.allowed_splits):
                 test_dataset.append({
                     'text': el['text'],
                     'image': el['image'],

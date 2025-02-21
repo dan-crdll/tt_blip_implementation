@@ -1,8 +1,5 @@
 import torch 
-from torch import nn 
 from transformers import ViTImageProcessor, BertTokenizer, BlipProcessor
-from PIL import Image
-import json
 
 
 class DataPreprocessor():
