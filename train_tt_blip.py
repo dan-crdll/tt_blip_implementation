@@ -13,9 +13,9 @@ model = TT_BLIP_Model(
         ds_loader.dp.empty_pixel_values, 
         ds_loader.dp.empty_input_ids,
         ds_loader.dp.empty_attn_mask, 
-        1024, 
+        2048, 
         16,
-        trainable=-3
+        trainable=-5
     )
 
 logger = WandbLogger('TT_BLIP_DGM4', project="Thesis_New")

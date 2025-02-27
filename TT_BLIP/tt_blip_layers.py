@@ -124,17 +124,17 @@ class FusionLayer(nn.Module):
 
         self.mlp_i = nn.Sequential(
             nn.Linear(768, embed_dim),
-            nn.ReLU(),
+            nn.ReLU6(),
             nn.Linear(embed_dim, embed_dim)
         )
         self.mlp_m = nn.Sequential(
             nn.Linear(768, embed_dim),
-            nn.ReLU(),
+            nn.ReLU6(),
             nn.Linear(embed_dim, embed_dim)
         )
         self.mlp_t = nn.Sequential(
             nn.Linear(768, embed_dim),
-            nn.ReLU(),
+            nn.ReLU6(),
             nn.Linear(embed_dim, embed_dim)
         )
 
@@ -162,10 +162,10 @@ class ClassificationLayer(nn.Module):
         self.global_pooling = nn.AdaptiveAvgPool1d(1)
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ReLU6(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ReLU6(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, 1)
         )
