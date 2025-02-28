@@ -160,11 +160,11 @@ class ClassificationLayer(nn.Module):
 
 
 class BiDec_Model(L.LightningModule):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, trainable=-3):
+    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3):
         super().__init__()
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, embed_dim, trainable)
-        self.fusion_layer = FusionLayer(768, num_heads, embed_dim)
-        self.classification_layer = ClassificationLayer(embed_dim)
+        self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim)
+        self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn = Accuracy('binary')
         self.f1_fn = F1Score('binary')
