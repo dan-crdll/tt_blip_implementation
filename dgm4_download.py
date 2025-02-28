@@ -11,8 +11,8 @@ os.makedirs('./data/DGM4', exist_ok=True)
 os.makedirs('./data/DGM4/manipulation', exist_ok=True)
 os.makedirs('./data/DGM4/origin', exist_ok=True)
 
-origins = ['washington_post', 'bbc']   # 'bbc', 'guardian', 'usa_today', 
-manipulations = ['simswap', 'StyleCLIP']   # 'HFGI', 'StyleCLIP', 'infoswap', 
+origins = ['washington_post']#, 'bbc']   # 'bbc', 'guardian', 'usa_today', 
+manipulations = ['simswap']#, 'StyleCLIP']   # 'HFGI', 'StyleCLIP', 'infoswap', 
 
 for origin in origins:
     url = f'https://huggingface.co/datasets/rshaojimmy/DGM4/resolve/main/origin/{origin}.zip'
