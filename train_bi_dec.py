@@ -6,7 +6,7 @@ import torch
 
 
 
-ds_loader = DatasetLoader(batch_size=64)
+ds_loader = DatasetLoader(batch_size=16)
 train_dl, val_dl = ds_loader.get_dataloaders()
 
 model = BiDec_Model(
@@ -18,8 +18,8 @@ model = BiDec_Model(
         trainable=-3
     )
 
-logger = WandbLogger('TT_BLIP_DGM4', project="Thesis_New")
+logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
 
 torch.set_float32_matmul_precision('high')
-trainer = Trainer(max_epochs=10, logger=logger, log_every_n_steps=1, precision='bf16-mixed')
+trainer = Trainer(max_epochs=10, logger=logger, log_every_n_steps=1, precision='bf16-mixed', accumulate_grad_batches=16, gradient_clip_val=1.0)
 trainer.fit(model, train_dl, val_dl)

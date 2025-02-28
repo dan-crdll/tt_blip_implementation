@@ -172,7 +172,16 @@ class BiDec_Model(L.LightningModule):
         self.recall_fn = Recall('binary')
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.1)
+        def lr_lambda(current_step):
+            warmup_steps = int(0.05 * self.trainer.max_steps)
+            if current_step < warmup_steps:
+                return current_step / warmup_steps
+            return 0.5 * (1 + torch.cos(torch.tensor(current_step - warmup_steps)/(self.trainer.max_steps - warmup_steps) * 3.1416))
+
+        scheduler = {"scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+                "interval":"step"}
+        return [optimizer], [scheduler]
     
     def forward(self, x):
         z = self.feature_extraction_layer(*x)
