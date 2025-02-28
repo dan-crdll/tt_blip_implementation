@@ -3,10 +3,11 @@ from torch import nn
 from transformers import ViTForImageClassification, BertModel, BlipForImageTextRetrieval
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import BinaryAUROC
 
 
 class FeatureExtractionLayer(nn.Module):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, trainable):
+    def __init__(self, empty_img, empty_txt, empty_attn_mask, trainable):
         super().__init__()
 
         self.vit = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").vit
@@ -162,7 +163,7 @@ class ClassificationLayer(nn.Module):
 class BiDec_Model(L.LightningModule):
     def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3):
         super().__init__()
-        self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, embed_dim, trainable)
+        self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
         self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim)
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
@@ -170,9 +171,10 @@ class BiDec_Model(L.LightningModule):
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
+        self.auc_fn = BinaryAUROC()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.1)
+        optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
         def lr_lambda(current_step):
             warmup_steps = int(0.05 * self.trainer.max_steps)
             if current_step < warmup_steps:
@@ -200,9 +202,11 @@ class BiDec_Model(L.LightningModule):
         f1 = self.f1_fn(pred, y)
         prec = self.prec_fn(pred, y)
         rec = self.recall_fn(pred, y)
+        auc = self.auc_fn(pred, y)
 
         self.log("train_loss", loss, prog_bar=True)
         self.log("train_acc", acc, prog_bar=True)
+        self.log("train_auc", prog_bar=True)
 
         self.log("train_prec", prec, on_epoch=True, on_step=False)
         self.log("train_rec", rec, on_epoch=True, on_step=False)
@@ -220,9 +224,11 @@ class BiDec_Model(L.LightningModule):
         f1 = self.f1_fn(pred, y)
         prec = self.prec_fn(pred, y)
         rec = self.recall_fn(pred, y)
+        auc = self.auc_fn(pred, y)
 
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", acc, prog_bar=True)
+        self.log("val_auc", auc, prog_bar=True)
 
         self.log("val_prec", prec, on_epoch=True, on_step=False)
         self.log("val_rec", rec, on_epoch=True, on_step=False)

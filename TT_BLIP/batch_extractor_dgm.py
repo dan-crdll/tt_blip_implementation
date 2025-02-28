@@ -9,7 +9,7 @@ from datasets import load_dataset
 
 
 class DatasetLoader:
-    def __init__(self, allowed_splits=['washington_post', 'simswap', 'bbc', 'StyleCLIP'], batch_size=8):
+    def __init__(self, allowed_splits=['washington_post', 'bbc', 'guardian', 'usa_today', 'simswap', 'StyleCLIP', 'HFGI', 'infoswap'], batch_size=8):
         self.dp = DataPreprocessor()
         self.allowed_splits = allowed_splits
         self.train_dataset, self.test_dataset = self.create_datasets()
