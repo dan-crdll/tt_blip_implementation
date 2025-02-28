@@ -11,9 +11,9 @@ from datasets import load_dataset
 class DatasetLoader:
     def __init__(self, allowed_splits=['washington_post', 'simswap', 'StyleCLIP', 'bbc'], batch_size=8):
         self.dp = DataPreprocessor()
+        self.allowed_splits = allowed_splits
         self.train_dataset, self.test_dataset = self.create_datasets()
         self.batch_size = batch_size
-        self.allowed_splits = allowed_splits
 
     def create_datasets(self):
         train_dataset = []

@@ -116,45 +116,28 @@ class FeatureExtractionLayer(nn.Module):
 
 
 class FusionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads, hidden_dim, num_encoders=11, num_decoders=11):
         super().__init__()
-        self.cross_attn_i = nn.MultiheadAttention(768, num_heads, batch_first=True)
-        self.cross_attn_m = nn.MultiheadAttention(768, num_heads, batch_first=True)
-        self.self_attn_t = nn.MultiheadAttention(768, num_heads, batch_first=True)
-
-        self.mlp_i = nn.Sequential(
-            nn.Linear(768, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, embed_dim)
-        )
-        self.mlp_m = nn.Sequential(
-            nn.Linear(768, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, embed_dim)
-        )
-        self.mlp_t = nn.Sequential(
-            nn.Linear(768, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, embed_dim)
-        )
+        encoder_layer = nn.TransformerEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
+        decoder_layer = nn.TransformerDecoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_encoders)
+        self.decoder_img = nn.TransformerDecoder(decoder_layer, num_decoders)
+        self.decoder_txt = nn.TransformerDecoder(decoder_layer, num_decoders)
 
     def forward(self, z):
         z_i, z_t, z_m = z
 
-        z_i, _ = self.cross_attn_i(z_i, z_i, z_t)
-        z_i = self.mlp_i(z_i)
+        z_m = self.encoder(z_m)
+        
+        z_i = self.decoder_img(z_i, z_m)
         z_i = z_i[:, 0].unsqueeze(1)
 
-        z_m, _ = self.cross_attn_m(z_m, z_m, z_t)
-        z_m = self.mlp_m(z_m)
-        z_m = z_m[:, 0].unsqueeze(1)
 
-        z_t, _ = self.self_attn_t(z_t, z_t, z_t)
-        z_t = self.mlp_t(z_t)
+        z_t = self.decoder_txt(z_t, z_m)
         z_t = z_t[:, 0].unsqueeze(1)
 
-        z = torch.cat([z_i, z_m, z_t], 1)
-        return z # BSZ x 3 x EMBED_DIM
+        z = torch.cat([z_i, z_t], 1)
+        return z # BSZ x 2 x EMBED_DIM
     
 class ClassificationLayer(nn.Module):
     def __init__(self, embed_dim, hidden_dim=2048):
@@ -176,11 +159,11 @@ class ClassificationLayer(nn.Module):
         return y 
 
 
-class TT_BLIP_Model(L.LightningModule):
+class BiDec_Model(L.LightningModule):
     def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, trainable=-3):
         super().__init__()
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, embed_dim, trainable)
-        self.fusion_layer = FusionLayer(embed_dim, num_heads)
+        self.fusion_layer = FusionLayer(768, num_heads, embed_dim)
         self.classification_layer = ClassificationLayer(embed_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn = Accuracy('binary')
