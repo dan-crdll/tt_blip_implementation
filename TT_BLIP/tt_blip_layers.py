@@ -141,11 +141,11 @@ class FusionLayer(nn.Module):
     def forward(self, z):
         z_i, z_t, z_m = z
 
-        z_i, _ = self.cross_attn_i(z_i, z_i, z_t)
+        z_i, _ = self.cross_attn_i(z_t, z_i, z_i)
         z_i = self.mlp_i(z_i)
         z_i = z_i[:, 0].unsqueeze(1)
 
-        z_m, _ = self.cross_attn_m(z_m, z_m, z_t)
+        z_m, _ = self.cross_attn_m(z_t, z_m, z_m)
         z_m = self.mlp_m(z_m)
         z_m = z_m[:, 0].unsqueeze(1)
 
