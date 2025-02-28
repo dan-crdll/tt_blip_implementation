@@ -13,7 +13,7 @@ model = BiDec_Model(
         ds_loader.dp.empty_pixel_values, 
         ds_loader.dp.empty_input_ids,
         ds_loader.dp.empty_attn_mask, 
-        1024, 
+        768, 
         16,
         trainable=-3
     )
