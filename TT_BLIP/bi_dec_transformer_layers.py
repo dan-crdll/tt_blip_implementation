@@ -140,7 +140,7 @@ class CrossAttnEncoderLayer(nn.Module):
 
     def forward(self, q, k, v):
         z, _ = self.multi_head_attn(q, k, v)
-        x = self.norm_1(x + z)
+        x = self.norm_1(k + z)
         z = self.mlp(x)
         x = self.norm_2(x + z)
         return x
@@ -265,7 +265,7 @@ class BiDec_Model(L.LightningModule):
         self.log("train_loss", loss, prog_bar=True)
         self.log("c_loss", c_loss, prog_bar=True)
         self.log("train_acc", acc, prog_bar=True)
-        self.log("train_auc", prog_bar=True)
+        self.log("train_auc", auc, prog_bar=True)
 
         self.log("train_prec", prec, on_epoch=True, on_step=False)
         self.log("train_rec", rec, on_epoch=True, on_step=False)
