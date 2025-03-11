@@ -4,6 +4,7 @@ from transformers import ViTForImageClassification, BertModel, BlipForImageTextR
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC
+import torch.nn.functional as F
 
 
 class FeatureExtractionLayer(nn.Module):
@@ -116,30 +117,84 @@ class FeatureExtractionLayer(nn.Module):
         return image_feature, txt_feature, multimodal_feature
 
 
+"""
+Definition of cross attention encoder layers and wrapper
+"""
+class CrossAttnEncoderLayer(nn.Module):
+    def __init__(self, embed_dim, num_heads, hidden_dim, batch_first=True):
+        super().__init__()
+
+        self.multi_head_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=batch_first)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, embed_dim)
+        )
+
+        self.norm_1 = nn.LayerNorm(embed_dim)
+        self.norm_2 = nn.LayerNorm(embed_dim)
+
+    def forward(self, q, k, v):
+        z, _ = self.multi_head_attn(q, k, v)
+        x = self.norm_1(x + z)
+        z = self.mlp(x)
+        x = self.norm_2(x + z)
+        return x
+    
+
+class CrossAttnEncoder(nn.Module):
+    def __init__(self, encoder_layer, num_encoders):
+        super().__init__()
+
+        self.encoders = nn.ModuleList([
+            encoder_layer for _ in range(num_encoders)
+        ])
+    
+    def forward(self, z_q, z_kv):
+        y = z_kv
+
+        for encoder in self.encoders:
+            y = encoder(z_q, y, y)
+        return y
+
+
+"""
+Fusion Layer for feature concatenation which uses self and 
+cross attention encoders and computes contrastive loss
+"""
 class FusionLayer(nn.Module):
     def __init__(self, embed_dim, num_heads, hidden_dim, num_encoders=11, num_decoders=11):
         super().__init__()
         encoder_layer = nn.TransformerEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
-        decoder_layer = nn.TransformerDecoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
+        decoder_layer = CrossAttnEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_encoders)
-        self.decoder_img = nn.TransformerDecoder(decoder_layer, num_decoders)
-        self.decoder_txt = nn.TransformerDecoder(decoder_layer, num_decoders)
+        self.decoder_img = CrossAttnEncoder(decoder_layer, num_decoders)
+        self.decoder_txt = CrossAttnEncoder(decoder_layer, num_decoders)
 
     def forward(self, z):
         z_i, z_t, z_m = z
 
         z_m = self.encoder(z_m)
         
-        z_i = self.decoder_img(z_i, z_m)
-        z_i = z_i[:, 0].unsqueeze(1)
+        z_i = self.decoder_img(z_m, z_i)
+        z_t = self.decoder_txt(z_m, z_t)
 
+        # contrastive loss computation (cosine similarity)
+        l = (1.0 - F.cosine_similarity(z_i, z_t)).mean()
 
-        z_t = self.decoder_txt(z_t, z_m)
-        z_t = z_t[:, 0].unsqueeze(1)
+        # z_i = z_i[:, 0].unsqueeze(1)
+        # z_t = z_t[:, 0].unsqueeze(1)
 
         z = torch.cat([z_i, z_t], 1)
-        return z # BSZ x 2 x EMBED_DIM
+        return z, l
     
+"""
+Classification Layer for binary (Real/Fake) classification
+"""
 class ClassificationLayer(nn.Module):
     def __init__(self, embed_dim, hidden_dim=2048):
         super().__init__()
@@ -160,6 +215,9 @@ class ClassificationLayer(nn.Module):
         return y 
 
 
+"""
+Complete architecture
+"""
 class BiDec_Model(L.LightningModule):
     def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3):
         super().__init__()
@@ -187,14 +245,14 @@ class BiDec_Model(L.LightningModule):
     
     def forward(self, x):
         z = self.feature_extraction_layer(*x)
-        z = self.fusion_layer(z)
+        z, c_loss = self.fusion_layer(z)
         y = self.classification_layer(z)
-        return y
+        return y, c_loss
     
     def training_step(self, batch):
         x, y = batch 
-        pred = self.forward(x)
-        loss = self.loss_fn(pred, y)
+        pred, c_loss = self.forward(x)
+        loss = self.loss_fn(pred, y) + c_loss
 
         pred = nn.functional.sigmoid(pred)
         acc = self.acc_fn(pred, y)
@@ -205,6 +263,7 @@ class BiDec_Model(L.LightningModule):
         auc = self.auc_fn(pred, y)
 
         self.log("train_loss", loss, prog_bar=True)
+        self.log("c_loss", c_loss, prog_bar=True)
         self.log("train_acc", acc, prog_bar=True)
         self.log("train_auc", prog_bar=True)
 
@@ -215,8 +274,8 @@ class BiDec_Model(L.LightningModule):
     
     def validation_step(self, batch):
         x, y = batch 
-        pred = self.forward(x)
-        loss = self.loss_fn(pred, y)
+        pred, c_loss = self.forward(x)
+        loss = self.loss_fn(pred, y) + c_loss
 
         pred = nn.functional.sigmoid(pred)
         acc = self.acc_fn(pred, y)
