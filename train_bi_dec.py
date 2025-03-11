@@ -12,7 +12,7 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
     download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
-    ds_loader = DatasetLoader(batch_size=batch_size)
+    ds_loader = DatasetLoader(batch_size=batch_size, allowed_splits=origins+manipulations)
     train_dl, val_dl = ds_loader.get_dataloaders()
 
     model = BiDec_Model(
