@@ -7,9 +7,9 @@ from dgm4_download import download_dgm4
 import yaml
 
 
-def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc):
+def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations):
     print("Downloading DGM4")
-    download_dgm4()
+    download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
     ds_loader = DatasetLoader(batch_size=batch_size)
@@ -50,5 +50,7 @@ if __name__=="__main__":
         trainable=params["trainable"],
         epochs=params["epochs"],
         batch_size=params["batch_size"],
-        grad_acc=params["grad_acc"]
+        grad_acc=params["grad_acc"],
+        origins=params['origins'],
+        manipulations=params['manipulations']
     )

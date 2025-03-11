@@ -4,7 +4,10 @@ import os
 import concurrent.futures
 
 
-def download_dgm4():
+def download_dgm4(
+        origins = ['washington_post', 'bbc', 'guardian', 'usa_today'], 
+        manipulations = ['simswap', 'StyleCLIP', 'HFGI', 'infoswap'] 
+    ):
     os.makedirs('./hf_cache', exist_ok=True)
     path = "hf_cache/"
 
@@ -12,9 +15,6 @@ def download_dgm4():
     os.makedirs('./data/DGM4', exist_ok=True)
     os.makedirs('./data/DGM4/manipulation', exist_ok=True)
     os.makedirs('./data/DGM4/origin', exist_ok=True)
-
-    origins = ['washington_post', 'bbc', 'guardian', 'usa_today']
-    manipulations = ['simswap', 'StyleCLIP', 'HFGI', 'infoswap'] 
 
     def download_and_extract(url, extract_path, name):
         response = requests.get(url, stream=True)

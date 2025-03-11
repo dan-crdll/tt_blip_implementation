@@ -4,3 +4,5 @@ trainable: 3
 epochs: 15
 batch_size: 16
 grad_acc: 32
+origins: ['washington_post', 'bbc', 'guardian', 'usa_today']
+manipulations: ['simswap', 'StyleCLIP', 'HFGI', 'infoswap']
