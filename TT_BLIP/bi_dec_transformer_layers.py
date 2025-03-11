@@ -232,7 +232,7 @@ class BiDec_Model(L.LightningModule):
         self.auc_fn = BinaryAUROC()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
         def lr_lambda(current_step):
             warmup_steps = int(0.05 * self.trainer.max_steps)
             if current_step < warmup_steps:
