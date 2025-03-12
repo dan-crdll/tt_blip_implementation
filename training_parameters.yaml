@@ -1,6 +1,6 @@
 num_heads: 8
-hidden_dim: 2048
-trainable: 3
+hidden_dim: 1024
+trainable: 1
 epochs: 15
 batch_size: 16
 grad_acc: 32
