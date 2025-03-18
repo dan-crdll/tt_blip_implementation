@@ -43,16 +43,34 @@ class DatasetLoader:
         images = []
         texts = []
         labels = []
+        multi_labels = []
+
+        poss = {
+            'face_attribute': 0,
+            'face_swap': 1,
+            'text_attribute': 2,
+            'text_swap': 3,
+        }
 
         for b in batch:
+            multi = [0, 0, 0, 0]
             path_img = f"./data/{b['image']}"
             images.append(Image.open(path_img).convert('RGB'))
             texts.append(b['text'])
             labels.append(1 if b['fake_cls'] == 'orig' else 0)
+            if b['fake_cls'] == 'orig':
+                labels.append(1)
+            else:
+                labels.append(0)
+                manip = b['fake_cls'].split('&')
+                for m in manip:
+                    multi[poss[m]] = 1.0
+            multi_labels.append(torch.tensor(multi).unsqueeze(0))
 
         x = self.dp(images, texts)
         labels = torch.tensor(labels)
-        y = labels.to(torch.float)
+        multi_labels = torch.vstack(multi_labels)
+        y = (labels.to(torch.float), multi_labels)
         return x, y
 
     def get_dataloaders(self):

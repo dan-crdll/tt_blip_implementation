@@ -212,7 +212,8 @@ class ClassificationLayer(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
-            nn.Linear(hidden_dim, 4)
+            nn.Linear(hidden_dim, 4),
+            nn.Sigmoid()
         )
 
     def forward(self, z):
@@ -235,7 +236,8 @@ class BiDec_Model(L.LightningModule):
         self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim)
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
-        self.acc_fn = Accuracy('binary')
+        self.acc_fn_bin = Accuracy('binary')
+        self.acc_fn_multi = Accuracy('multilabel')
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
@@ -260,21 +262,25 @@ class BiDec_Model(L.LightningModule):
         return y, c_loss
     
     def training_step(self, batch):
-        x, y = batch 
+        x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        loss = self.loss_fn(pred_bin, y) + c_loss
+        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
+        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
 
         pred_bin = nn.functional.sigmoid(pred_bin)
-        acc = self.acc_fn(pred_bin, y)
+        acc_bin = self.acc_fn_bin(pred_bin, y_bin)
+        acc_multi = self.acc_fn_multi(pred_multi, y_multi)
 
-        f1 = self.f1_fn(pred_bin, y)
-        prec = self.prec_fn(pred_bin, y)
-        rec = self.recall_fn(pred_bin, y)
-        auc = self.auc_fn(pred_bin, y)
+        f1 = self.f1_fn(pred_bin, y_bin)
+        prec = self.prec_fn(pred_bin, y_bin)
+        rec = self.recall_fn(pred_bin, y_bin)
+        auc = self.auc_fn(pred_bin, y_bin)
 
         self.log("train_loss", loss, prog_bar=True)
         self.log("c_loss", c_loss, prog_bar=True)
-        self.log("train_acc", acc, prog_bar=True)
+        self.log("train_multi_loss", multi_loss, prog_bar=True)
+        self.log("train_acc_bin", acc_bin, prog_bar=True)
+        self.log("train_acc_multi", acc_multi, prog_bar=True)
         self.log("train_auc", auc, prog_bar=True)
 
         self.log("train_prec", prec, on_epoch=True, on_step=False)
@@ -283,23 +289,27 @@ class BiDec_Model(L.LightningModule):
         return loss 
     
     def validation_step(self, batch):
-        x, y = batch 
+        x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        loss = self.loss_fn(pred_bin, y) + c_loss
+        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
+        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
 
         pred_bin = nn.functional.sigmoid(pred_bin)
-        acc = self.acc_fn(pred_bin, y)
+        acc_bin = self.acc_fn_bin(pred_bin, y_bin)
+        acc_multi = self.acc_fn_multi(pred_multi, y_multi)
 
-        f1 = self.f1_fn(pred_bin, y)
-        prec = self.prec_fn(pred_bin, y)
-        rec = self.recall_fn(pred_bin, y)
-        auc = self.auc_fn(pred_bin, y)
+        f1 = self.f1_fn(pred_bin, y_bin)
+        prec = self.prec_fn(pred_bin, y_bin)
+        rec = self.recall_fn(pred_bin, y_bin)
+        auc = self.auc_fn(pred_bin, y_bin)
 
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", acc, prog_bar=True)
+        self.log("val_multi_loss", multi_loss, prog_bar=True)
+        self.log("val_acc_bin", acc_bin, prog_bar=True)
+        self.log("val_acc_multi", acc_multi, prog_bar=True)
         self.log("val_auc", auc, prog_bar=True)
 
-        self.log("val_prec", prec, on_epoch=True, on_step=False)
-        self.log("val_rec", rec, on_epoch=True, on_step=False)
-        self.log("val_f1", f1, on_epoch=True, on_step=False)
+        self.log("val_prec", prec)
+        self.log("val_rec", rec)
+        self.log("val_f1", f1)
         return loss 
