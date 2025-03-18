@@ -57,7 +57,7 @@ class DatasetLoader:
             path_img = f"./data/{b['image']}"
             images.append(Image.open(path_img).convert('RGB'))
             texts.append(b['text'])
-            labels.append(1 if b['fake_cls'] == 'orig' else 0)
+            # labels.append(1 if b['fake_cls'] == 'orig' else 0)
             if b['fake_cls'] == 'orig':
                 labels.append(1)
             else:

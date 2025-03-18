@@ -1,5 +1,5 @@
 from TT_BLIP.batch_extractor_dgm import DatasetLoader
-from TT_BLIP.bi_dec_transformer_layers import BiDec_Model
+from TT_BLIP.bi_dec_transformer_layers_simplified import BiDec_Model
 from lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import torch
@@ -11,7 +11,7 @@ import yaml
 
 def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations):
     print("Downloading DGM4")
-    download_dgm4(origins, manipulations)
+    # download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
     ds_loader = DatasetLoader(batch_size=batch_size, allowed_splits=origins+manipulations)

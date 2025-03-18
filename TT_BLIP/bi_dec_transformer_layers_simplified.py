@@ -109,7 +109,7 @@ class FeatureExtractionLayer(nn.Module):
         multimodal_feature = torch.cat([cls_multi, blip_encodings], 1)
 
         # contrastive loss computation (cosine similarity)
-        l = (1.0 - F.cosine_similarity(image_feature, txt_feature)).mean()
+        l = (1.0 - F.cosine_similarity(image_feature, multimodal_feature)).mean() + (1.0 - F.cosine_similarity(image_feature, multimodal_feature)).mean()
 
         # They all have dim BSZ x 578 x 768 with cls token
         return image_feature, txt_feature, multimodal_feature, l
@@ -187,8 +187,7 @@ class ClassificationLayer(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
-            nn.Linear(hidden_dim, 4),
-            nn.Sigmoid()
+            nn.Linear(hidden_dim, 4)
         )
 
     def forward(self, z):
@@ -212,7 +211,7 @@ class BiDec_Model(L.LightningModule):
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn_bin = Accuracy('binary')
-        self.acc_fn_multi = Accuracy('multilabel')
+        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
@@ -239,7 +238,8 @@ class BiDec_Model(L.LightningModule):
     def training_step(self, batch):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
+        # print(pred_multi.shape, pred_bin.shape)
+        multi_loss = self.loss_fn(pred_multi, y_multi)
         loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
 
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -266,7 +266,9 @@ class BiDec_Model(L.LightningModule):
     def validation_step(self, batch):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
+        # print(y_bin.shape)
+        # print(pred_bin.shape)
+        multi_loss = self.loss_fn(pred_multi, y_multi)
         loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
 
         pred_bin = nn.functional.sigmoid(pred_bin)
