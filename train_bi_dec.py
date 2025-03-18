@@ -6,6 +6,8 @@ import torch
 from dgm4_download import download_dgm4
 import yaml
 
+# Mantenere solo un cross attention semplice e rimuovere le 
+# skip connection e avvicinare le feature prima
 
 def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations):
     print("Downloading DGM4")

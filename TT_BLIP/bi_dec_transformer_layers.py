@@ -25,13 +25,8 @@ class FeatureExtractionLayer(nn.Module):
         self.initialize_training_mode(trainable)
 
     def initialize_training_mode(self, trainable):
-        trainable_layers = self.blip.text_encoder.encoder.layer[trainable:]
         for param in self.blip.parameters():
             param.requires_grad = False
-        for layer in trainable_layers:
-            for param in layer.parameters():
-                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-                    param.requires_grad = True
 
         trainable_layers = self.blip_img.text_encoder.encoder.layer[trainable:]
         for param in self.blip_img.parameters():
@@ -113,8 +108,11 @@ class FeatureExtractionLayer(nn.Module):
         txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1)
         multimodal_feature = torch.cat([cls_multi, blip_encodings], 1)
 
+        # contrastive loss computation (cosine similarity)
+        l = (1.0 - F.cosine_similarity(image_feature, txt_feature)).mean()
+
         # They all have dim BSZ x 578 x 768 with cls token
-        return image_feature, txt_feature, multimodal_feature
+        return image_feature, txt_feature, multimodal_feature, l
 
 
 """
@@ -177,20 +175,18 @@ class FusionLayer(nn.Module):
 
     def forward(self, z):
         z_i, z_t, z_m = z
-
+        BSZ, _, N = z_i.shape
+        cls = torch.zeros((BSZ, 1, N)).to(z_i.device)
+        z_m = torch.cat([cls, z_m], 1)
         z_m = self.encoder(z_m)
         
         z_i = self.decoder_img(z_m, z_i)
         z_t = self.decoder_txt(z_m, z_t)
 
-        # contrastive loss computation (cosine similarity)
-        l = (1.0 - F.cosine_similarity(z_i, z_t)).mean()
-
         # z_i = z_i[:, 0].unsqueeze(1)
         # z_t = z_t[:, 0].unsqueeze(1)
 
-        z = torch.cat([z_i, z_t], 1)
-        return z, l
+        return z_i, z_t
     
 """
 Classification Layer for binary (Real/Fake) classification
@@ -199,7 +195,7 @@ class ClassificationLayer(nn.Module):
     def __init__(self, embed_dim, hidden_dim=2048):
         super().__init__()
         self.global_pooling = nn.AdaptiveAvgPool1d(1)
-        self.classifier = nn.Sequential(
+        self.bin_classifier = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
@@ -209,10 +205,24 @@ class ClassificationLayer(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
+        self.multi_classifier = nn.Sequential(
+            nn.Linear(embed_dim, hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, 4)
+        )
+
     def forward(self, z):
-        z = self.global_pooling(z.permute(0, 2, 1)).squeeze(-1)
-        y = self.classifier(z).squeeze(-1)
-        return y 
+        z_i, z_t = z
+
+        cls = (z_i[:, 0] + z_t[:, 0]) / 2.0
+
+        y_bin = self.bin_classifier(cls).squeeze(-1)
+        y_multi = self.multi_classifier(cls)
+        return y_bin, y_multi 
 
 
 """
@@ -244,23 +254,23 @@ class BiDec_Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, x):
-        z = self.feature_extraction_layer(*x)
-        z, c_loss = self.fusion_layer(z)
+        z_i, z_t, z_m, c_loss = self.feature_extraction_layer(*x)
+        z = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
         return y, c_loss
     
     def training_step(self, batch):
         x, y = batch 
-        pred, c_loss = self.forward(x)
-        loss = self.loss_fn(pred, y) + c_loss
+        (pred_bin, pred_multi), c_loss = self.forward(x)
+        loss = self.loss_fn(pred_bin, y) + c_loss
 
-        pred = nn.functional.sigmoid(pred)
-        acc = self.acc_fn(pred, y)
+        pred_bin = nn.functional.sigmoid(pred_bin)
+        acc = self.acc_fn(pred_bin, y)
 
-        f1 = self.f1_fn(pred, y)
-        prec = self.prec_fn(pred, y)
-        rec = self.recall_fn(pred, y)
-        auc = self.auc_fn(pred, y)
+        f1 = self.f1_fn(pred_bin, y)
+        prec = self.prec_fn(pred_bin, y)
+        rec = self.recall_fn(pred_bin, y)
+        auc = self.auc_fn(pred_bin, y)
 
         self.log("train_loss", loss, prog_bar=True)
         self.log("c_loss", c_loss, prog_bar=True)
@@ -274,16 +284,16 @@ class BiDec_Model(L.LightningModule):
     
     def validation_step(self, batch):
         x, y = batch 
-        pred, c_loss = self.forward(x)
-        loss = self.loss_fn(pred, y) + c_loss
+        (pred_bin, pred_multi), c_loss = self.forward(x)
+        loss = self.loss_fn(pred_bin, y) + c_loss
 
-        pred = nn.functional.sigmoid(pred)
-        acc = self.acc_fn(pred, y)
+        pred_bin = nn.functional.sigmoid(pred_bin)
+        acc = self.acc_fn(pred_bin, y)
 
-        f1 = self.f1_fn(pred, y)
-        prec = self.prec_fn(pred, y)
-        rec = self.recall_fn(pred, y)
-        auc = self.auc_fn(pred, y)
+        f1 = self.f1_fn(pred_bin, y)
+        prec = self.prec_fn(pred_bin, y)
+        rec = self.recall_fn(pred_bin, y)
+        auc = self.auc_fn(pred_bin, y)
 
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", acc, prog_bar=True)
