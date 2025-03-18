@@ -242,7 +242,6 @@ class BiDec_Model(L.LightningModule):
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
         self.auc_fn = BinaryAUROC()
-        
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
@@ -263,12 +262,6 @@ class BiDec_Model(L.LightningModule):
         return y, c_loss
     
     def aggregational_loss(self, pred_bin, pred_multi, target_bin, target_multi, c_loss):
-        # for i in range(target_bin.shape[0]):
-        #     if target_bin[i].item() == 0:
-        #         pred_multi[i, 0] = 0.0
-        #         pred_multi[i, 1] = 0.0
-        #         pred_multi[i, 2] = 0.0
-        #         pred_multi[i, 3] = 0.0
 
         bin_loss = self.loss_fn(pred_bin, target_bin)
         multi_loss = self.loss_fn(pred_multi, target_multi)
