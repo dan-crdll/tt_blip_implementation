@@ -237,11 +237,12 @@ class BiDec_Model(L.LightningModule):
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn_bin = Accuracy('binary')
-        self.acc_fn_multi = Accuracy('multilabel')
+        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
         self.auc_fn = BinaryAUROC()
+        
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
@@ -261,11 +262,28 @@ class BiDec_Model(L.LightningModule):
         y = self.classification_layer(z)
         return y, c_loss
     
+    def aggregational_loss(self, pred_bin, pred_multi, target_bin, target_multi, c_loss):
+        # for i in range(target_bin.shape[0]):
+        #     if target_bin[i].item() == 0:
+        #         pred_multi[i, 0] = 0.0
+        #         pred_multi[i, 1] = 0.0
+        #         pred_multi[i, 2] = 0.0
+        #         pred_multi[i, 3] = 0.0
+
+        bin_loss = self.loss_fn(pred_bin, target_bin)
+        multi_loss = self.loss_fn(pred_multi, target_multi)
+
+        loss = bin_loss + multi_loss + c_loss
+        return loss
+    
+
     def training_step(self, batch):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
-        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        # print(pred_multi.shape, pred_bin.shape)
+        multi_loss = self.loss_fn(pred_multi, y_multi)
+        # loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        loss = self.aggregational_loss(pred_bin, pred_multi, y_bin, y_multi, c_loss)
 
         pred_bin = nn.functional.sigmoid(pred_bin)
         acc_bin = self.acc_fn_bin(pred_bin, y_bin)
@@ -291,8 +309,11 @@ class BiDec_Model(L.LightningModule):
     def validation_step(self, batch):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
-        multi_loss = F.nll_loss(pred_multi, y_multi * (torch.ones_like(y_bin) - y_bin))
-        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        # print(y_bin.shape)
+        # print(pred_bin.shape)
+        multi_loss = self.loss_fn(pred_multi, y_multi)
+        # loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        loss = self.aggregational_loss(pred_bin, pred_multi, y_bin, y_multi, c_loss)
 
         pred_bin = nn.functional.sigmoid(pred_bin)
         acc_bin = self.acc_fn_bin(pred_bin, y_bin)

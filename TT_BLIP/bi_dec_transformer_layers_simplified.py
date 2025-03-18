@@ -235,12 +235,28 @@ class BiDec_Model(L.LightningModule):
         y = self.classification_layer(z)
         return y, c_loss
     
+    def aggregational_loss(self, pred_bin, pred_multi, target_bin, target_multi, c_loss):
+        for i in range(target_bin.shape[0]):
+            if target_bin[i].item() == 0:
+                pred_multi[i, 0] = 0.0
+                pred_multi[i, 1] = 0.0
+                pred_multi[i, 2] = 0.0
+                pred_multi[i, 3] = 0.0
+
+        bin_loss = self.loss_fn(pred_bin, target_bin)
+        multi_loss = self.loss_fn(pred_multi, target_multi)
+
+        loss = bin_loss + multi_loss + c_loss
+        return loss
+    
+
     def training_step(self, batch):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
         # print(pred_multi.shape, pred_bin.shape)
         multi_loss = self.loss_fn(pred_multi, y_multi)
-        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        # loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        loss = self.aggregational_loss(pred_bin, pred_multi, y_bin, y_multi, c_loss)
 
         pred_bin = nn.functional.sigmoid(pred_bin)
         acc_bin = self.acc_fn_bin(pred_bin, y_bin)
@@ -269,7 +285,8 @@ class BiDec_Model(L.LightningModule):
         # print(y_bin.shape)
         # print(pred_bin.shape)
         multi_loss = self.loss_fn(pred_multi, y_multi)
-        loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        # loss = self.loss_fn(pred_bin, y_bin) + c_loss + multi_loss
+        loss = self.aggregational_loss(pred_bin, pred_multi, y_bin, y_multi, c_loss)
 
         pred_bin = nn.functional.sigmoid(pred_bin)
         acc_bin = self.acc_fn_bin(pred_bin, y_bin)
