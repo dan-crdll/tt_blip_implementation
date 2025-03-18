@@ -176,8 +176,7 @@ class FusionLayer(nn.Module):
     def forward(self, z):
         z_i, z_t, z_m = z
         BSZ, _, N = z_i.shape
-        cls = torch.zeros((BSZ, 1, N)).to(z_i.device)
-        z_m = torch.cat([cls, z_m], 1)
+        
         z_m = self.encoder(z_m)
         
         z_i = self.decoder_img(z_m, z_i)
