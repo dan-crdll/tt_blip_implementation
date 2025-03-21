@@ -1,5 +1,5 @@
 from TT_BLIP.batch_extractor_dgm import DatasetLoader
-from TT_BLIP.bi_dec_transformer_layers import BiDec_Model
+from TT_BLIP.bi_dec_transformer_layers_simplified import BiDec_Model
 from lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import torch
