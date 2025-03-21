@@ -187,18 +187,21 @@ class ClassificationLayer(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
-            nn.Linear(hidden_dim, 4)
+            nn.Linear(hidden_dim, 4),
+            nn.Sigmoid()
         )
+
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
 
     def forward(self, z):
         z_i, z_t = z
+        z = torch.cat([z_i, z_t], 1).to(z_i.device)
 
-        cls = (z_i[:, 0] + z_t[:, 0]) / 2.0
+        cls = self.avg_pool(z.permute(0, 2, 1)).squeeze(-1)
 
         y_bin = self.bin_classifier(cls).squeeze(-1)
         y_multi = self.multi_classifier(cls)
         return y_bin, y_multi 
-
 
 """
 Complete architecture
