@@ -1,6 +1,7 @@
 import torch 
 from transformers import ViTImageProcessor, BertTokenizer, BlipProcessor
 from nltk.corpus import stopwords
+import nltk
 
 
 class DataPreprocessor():
