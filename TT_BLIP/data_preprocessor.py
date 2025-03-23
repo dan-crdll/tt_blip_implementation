@@ -1,12 +1,14 @@
 import torch 
 from transformers import ViTImageProcessor, BertTokenizer, BlipProcessor
+from nltk.corpus import stopwords
 
 
 class DataPreprocessor():
     def __init__(self):
         # BLIP preprocessing utils
         self.blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-
+        nltk.download('stopwords')
+        self.stop_words = set(stopwords.words('english'))
         empty = self.blip_processor(torch.zeros((3, 224, 224)), [""], return_tensors='pt')
         self.empty_pixel_values = empty['pixel_values']
         self.empty_input_ids = empty['input_ids']

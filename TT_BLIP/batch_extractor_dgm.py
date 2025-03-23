@@ -32,8 +32,9 @@ class DatasetLoader:
 
         for el in ds:
             if (el['image'].split('/')[2] in self.allowed_splits):
+                text_without_stopwords = ' '.join([word for word in el['text'].split() if word.lower() not in self.dp.stopwords])
                 test_dataset.append({
-                    'text': el['text'],
+                    'text': text_without_stopwords,
                     'image': el['image'],
                     'fake_cls': el['fake_cls']
                 })
