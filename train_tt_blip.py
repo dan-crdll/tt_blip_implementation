@@ -3,7 +3,19 @@ from TT_BLIP.tt_blip_layers import TT_BLIP_Model
 from lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import torch
+import random
+import numpy as np
 
+def seed_everything(seed=42):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed_everything()
 
 
 ds_loader = DatasetLoader(batch_size=64)
