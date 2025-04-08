@@ -7,6 +7,7 @@ from dgm4_download import download_dgm4
 import yaml
 import random
 import numpy as np
+import os
 
 def seed_everything(seed=42):
     torch.manual_seed(seed)
@@ -24,7 +25,8 @@ seed_everything()
 
 def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations):
     print("Downloading DGM4")
-    # download_dgm4(origins, manipulations)
+    if 'data' not in os.listdir('.'):
+        download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
     ds_loader = DatasetLoader(batch_size=batch_size, allowed_splits=origins+manipulations)

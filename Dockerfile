@@ -1,29 +1,14 @@
-# Containerized environment to train the model
-FROM pytorch/pytorch
+FROM python
 
-WORKDIR /ws
-COPY . /ws
+RUN mkdir /workspace
+WORKDIR /workspace 
 
-RUN cd /ws
-RUN pip install --no-cache-dir lightning datasets transformers wandb
+COPY . /workspace/
 
-CMD [ "python", "./train_bi_dec.py" ]
+RUN pip install torch lightning wandb transformers datasets tqdm numpy nltk pillow
+RUN cd /workspace 
 
+RUN apt update
+RUN apt install vim -y
 
-# HOW TO RUN
-
-# To build the image:
-# docker build -t <tag> .
-
-# Be sure to have a file with the following line (for logging):
-# WANDB_API_KEY=<wandb secret>
-
-# To run:
-# docker run -it --env-file <env_file_path> <tag> bash
-
-# Train directly without entering bash
-# docker run --env-file <env_file_path> <tag>
-
-# To copy saved state dictionary
-# docker cp <container_id>:/ws/model_state_dict.pth <host_directory>
-# to get container_id run: docker ps
+CMD ["bash", "-c", "wandb login && exec bash"]
