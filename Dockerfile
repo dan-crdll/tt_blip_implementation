@@ -11,4 +11,4 @@ RUN cd /workspace
 RUN apt update
 RUN apt install vim -y
 
-CMD ["bash", "-c", "wandb login && exec bash"]
+CMD ["bash", "-c", "git pull && wandb login && exec bash"]
