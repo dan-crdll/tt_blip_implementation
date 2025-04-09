@@ -23,7 +23,7 @@ seed_everything()
 # Mantenere solo un cross attention semplice e rimuovere le 
 # skip connection e avvicinare le feature prima
 
-def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations):
+def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations, gpus):
     print("Downloading DGM4")
     if 'data' not in os.listdir('.'):
         download_dgm4(origins, manipulations)
@@ -51,7 +51,8 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
         log_every_n_steps=1, 
         precision='bf16-mixed', 
         accumulate_grad_batches=grad_acc, 
-        gradient_clip_val=1.0
+        gradient_clip_val=1.0,
+        gpus=gpus
     )
     trainer.fit(model, train_dl, val_dl)
 
@@ -69,5 +70,6 @@ if __name__=="__main__":
         batch_size=params["batch_size"],
         grad_acc=params["grad_acc"],
         origins=params['origins'],
-        manipulations=params['manipulations']
+        manipulations=params['manipulations'],
+        gpus=params['gpus']
     )

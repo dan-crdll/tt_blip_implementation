@@ -6,3 +6,4 @@ batch_size: 16
 grad_acc: 32
 origins: ['washington_post', 'bbc']
 manipulations: ['simswap', 'StyleCLIP']
+gpus: [0, 1, 2]
