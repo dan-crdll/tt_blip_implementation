@@ -3,12 +3,11 @@ FROM python
 RUN mkdir /workspace
 WORKDIR /workspace 
 
-COPY . /workspace/
-
 RUN pip install torch lightning wandb transformers datasets tqdm numpy nltk pillow
-RUN cd /workspace 
 
 RUN apt update
 RUN apt install vim -y
 
-CMD ["bash", "-c", "git pull && wandb login && exec bash"]
+RUN cd /workspace
+
+CMD ["bash", "-c", "git clone https://github.com/dan-crdll/tt_blip_implementation.git && wandb login && exec bash"]

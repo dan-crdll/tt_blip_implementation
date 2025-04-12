@@ -161,7 +161,9 @@ class FusionLayer(nn.Module):
         z_i = self.encoder_img(z_m, z_i, z_i)
         z_t = self.encoder_txt(z_m, z_t, z_t)
 
-        return z_i, z_t
+        l = (1.0 - F.cosine_similarity(z_i, z_t)).mean()
+
+        return (z_i, z_t), l
     
 """
 Classification Layer for binary (Real/Fake) classification
@@ -237,10 +239,10 @@ class BiDec_Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, x):
-        z_i, z_t, z_m, c_loss = self.feature_extraction_layer(*x)
-        z = self.fusion_layer((z_i, z_t, z_m))
+        z_i, z_t, z_m, c_loss_1 = self.feature_extraction_layer(*x)
+        z, c_loss_2 = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
-        return y, c_loss
+        return y, (c_loss_1, c_loss_2)
     
     def training_step(self, batch):
         x, (y_bin, y_multi) = batch 
@@ -248,7 +250,7 @@ class BiDec_Model(L.LightningModule):
         
         multi_loss = self.loss_fn(pred_multi, y_multi)
         bin_loss = self.loss_fn(pred_bin, y_bin)
-        loss = c_loss + multi_loss + bin_loss
+        loss = c_loss[0] + c_loss[1] + multi_loss + bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -286,7 +288,7 @@ class BiDec_Model(L.LightningModule):
         )
 
         self.log('Train/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
-        self.log('Train/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        self.log('Train/con_loss', c_loss[0] + c_loss[1], prog_bar=True, on_epoch=False, on_step=True)
 
         # -- GENERAL LOSS --
         self.log("Train/loss", loss, prog_bar=True, on_epoch=True, on_step=False)
@@ -298,7 +300,7 @@ class BiDec_Model(L.LightningModule):
         
         multi_loss = self.loss_fn(pred_multi, y_multi)
         bin_loss = self.loss_fn(pred_bin, y_bin)
-        loss = c_loss + multi_loss + bin_loss
+        loss = c_loss[0] + c_loss[1] + multi_loss + bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -310,7 +312,7 @@ class BiDec_Model(L.LightningModule):
             {
                 'Val/loss_bin': bin_loss,
                 'Val/acc_bin': acc_bin
-            }, prog_bar=True, on_epoch=False, on_step=True
+            }, prog_bar=True, on_epoch=True, on_step=True
         )
         
         self.log_dict(
@@ -335,8 +337,8 @@ class BiDec_Model(L.LightningModule):
             }, prog_bar=True, on_epoch=True, on_step=False
         )
 
-        self.log('Val/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
-        self.log('Val/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        self.log('Val/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=True)
+        self.log('Val/con_loss', c_loss[0] + c_loss[1], prog_bar=True, on_epoch=True, on_step=True)
 
         # -- GENERAL LOSS --
         self.log("Val/loss", loss, prog_bar=True, on_epoch=True, on_step=False)
