@@ -9,6 +9,8 @@ import random
 import numpy as np
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+
 def seed_everything(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -52,7 +54,8 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
         precision='bf16-mixed', 
         accumulate_grad_batches=grad_acc, 
         gradient_clip_val=1.0,
-        gpus=gpus
+        devices=gpus,
+        strategy='ddps_find_unused_parameters_true'
     )
     trainer.fit(model, train_dl, val_dl)
 

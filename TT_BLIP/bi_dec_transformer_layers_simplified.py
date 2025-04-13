@@ -248,15 +248,15 @@ class BiDec_Model(L.LightningModule):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
-        multi_loss = self.loss_fn(pred_multi, y_multi)
-        bin_loss = self.loss_fn(pred_bin, y_bin)
+        multi_loss = self.loss_fn(pred_multi.float(), y_multi.float())
+        bin_loss = self.loss_fn(pred_bin.float(), y_bin.float())
         loss = c_loss[0] + c_loss[1] + multi_loss + bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
-        acc_bin = self.acc_fn_bin(pred_bin, y_bin)
-        f1 = self.f1_fn(pred_bin, y_bin)
-        auc = self.auc_fn(pred_bin, y_bin)
+        acc_bin = self.acc_fn_bin(pred_bin.float(), y_bin.float())
+        f1 = self.f1_fn(pred_bin.float(), y_bin.float())
+        auc = self.auc_fn(pred_bin.float(), y_bin.float())
 
         self.log_dict(
             {
@@ -274,10 +274,10 @@ class BiDec_Model(L.LightningModule):
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
-        cf1 = self.cf1(pred_multi, y_multi)
-        of1 = self.of1(pred_multi, y_multi)
-        mAP = self.mAP(pred_multi, y_multi)
-        acc_multi = self.acc_fn_multi(pred_multi, y_multi)
+        cf1 = self.cf1(pred_multi, y_multi.float())
+        of1 = self.of1(pred_multi, y_multi.float())
+        mAP = self.mAP(pred_multi, y_multi.long())
+        acc_multi = self.acc_fn_multi(pred_multi, y_multi.float())
         self.log_dict(
             {
                 'Train/cf1_multi':cf1,
@@ -298,21 +298,21 @@ class BiDec_Model(L.LightningModule):
         x, (y_bin, y_multi) = batch 
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
-        multi_loss = self.loss_fn(pred_multi, y_multi)
-        bin_loss = self.loss_fn(pred_bin, y_bin)
+        multi_loss = self.loss_fn(pred_multi, y_multi.float())
+        bin_loss = self.loss_fn(pred_bin, y_bin.float())
         loss = c_loss[0] + c_loss[1] + multi_loss + bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
-        acc_bin = self.acc_fn_bin(pred_bin, y_bin)
-        f1 = self.f1_fn(pred_bin, y_bin)
-        auc = self.auc_fn(pred_bin, y_bin)
+        acc_bin = self.acc_fn_bin(pred_bin, y_bin.float())
+        f1 = self.f1_fn(pred_bin, y_bin.float())
+        auc = self.auc_fn(pred_bin, y_bin.float())
 
         self.log_dict(
             {
                 'Val/loss_bin': bin_loss,
                 'Val/acc_bin': acc_bin
-            }, prog_bar=True, on_epoch=True, on_step=True
+            }, prog_bar=True, on_epoch=True, on_step=False
         )
         
         self.log_dict(
@@ -324,10 +324,10 @@ class BiDec_Model(L.LightningModule):
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
-        cf1 = self.cf1(pred_multi, y_multi)
-        of1 = self.of1(pred_multi, y_multi)
-        mAP = self.mAP(pred_multi, y_multi)
-        acc_multi = self.acc_fn_multi(pred_multi, y_multi)
+        cf1 = self.cf1(pred_multi, y_multi.float())
+        of1 = self.of1(pred_multi, y_multi.float())
+        mAP = self.mAP(pred_multi, y_multi.long())
+        acc_multi = self.acc_fn_multi(pred_multi, y_multi.float())
         self.log_dict(
             {
                 'Val/cf1_multi':cf1,
@@ -337,8 +337,8 @@ class BiDec_Model(L.LightningModule):
             }, prog_bar=True, on_epoch=True, on_step=False
         )
 
-        self.log('Val/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=True)
-        self.log('Val/con_loss', c_loss[0] + c_loss[1], prog_bar=True, on_epoch=True, on_step=True)
+        self.log('Val/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=False)
+        self.log('Val/con_loss', c_loss[0] + c_loss[1], prog_bar=True, on_epoch=True, on_step=False)
 
         # -- GENERAL LOSS --
         self.log("Val/loss", loss, prog_bar=True, on_epoch=True, on_step=False)
