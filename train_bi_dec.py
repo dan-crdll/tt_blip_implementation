@@ -52,7 +52,7 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
         accumulate_grad_batches=grad_acc, 
         gradient_clip_val=1.0,
         devices=gpus,
-        strategy='ddps_find_unused_parameters_true'
+        strategy='ddp_find_unused_parameters_true'
     )
     trainer.fit(model, train_dl, val_dl)
 
