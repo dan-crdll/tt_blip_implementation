@@ -28,22 +28,12 @@ class FeatureExtractionLayer(nn.Module):
         for param in self.blip.parameters():
             param.requires_grad = False
 
-        trainable_layers = self.blip_img.text_encoder.encoder.layer[trainable:]
         for param in self.blip_img.parameters():
             param.requires_grad = False
-        for layer in trainable_layers:
-            for param in layer.parameters():
-                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-                    param.requires_grad = True
-            
-        trainable_layers = self.blip_txt.text_encoder.encoder.layer[trainable:]
+        
         for param in self.blip_txt.parameters():
             param.requires_grad = False
-        for layer in trainable_layers:
-            for param in layer.parameters():
-                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
-                    param.requires_grad = True
-
+        
         trainable_layers = self.vit.encoder.layer[trainable:]
         for param in self.vit.parameters():
             param.requires_grad = False
