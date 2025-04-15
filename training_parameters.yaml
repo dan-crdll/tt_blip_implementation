@@ -2,8 +2,8 @@ num_heads: 8
 hidden_dim: 1024
 trainable: 3
 epochs: 15
-batch_size: 16
-grad_acc: 32
-origins: ['washington_post']
-manipulations: ['simswap']
-gpus: [0, 1, 2]
+batch_size: 4
+grad_acc: 128
+origins: ['washington_post', 'bbc']
+manipulations: ['simswap', 'StyleCLIP']
+gpus: [0, 1]
