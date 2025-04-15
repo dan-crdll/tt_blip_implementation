@@ -14,8 +14,8 @@ class FeatureExtractionLayer(nn.Module):
         self.vit = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").vit
         self.bert = BertModel.from_pretrained("google-bert/bert-base-uncased")      
 
-        self.blip_img = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
-        self.blip_txt = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        # self.blip_img = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        # self.blip_txt = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
         self.blip = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
 
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
@@ -28,11 +28,11 @@ class FeatureExtractionLayer(nn.Module):
         for param in self.blip.parameters():
             param.requires_grad = False
 
-        for param in self.blip_img.parameters():
-            param.requires_grad = False
+        # for param in self.blip_img.parameters():
+        #     param.requires_grad = False
         
-        for param in self.blip_txt.parameters():
-            param.requires_grad = False
+        # for param in self.blip_txt.parameters():
+        #     param.requires_grad = False
         
         trainable_layers = self.vit.encoder.layer[trainable:]
         for param in self.vit.parameters():
@@ -74,16 +74,16 @@ class FeatureExtractionLayer(nn.Module):
         """
         BLIP encodings have dimension BSZ x 577 x 768
         """
-        blip_i_encodings = self.blip_img(
-            pixel_values=blip_pixel_values,
-            input_ids=empty_txt,
-            attention_mask=empty_attn_mask
-        ).last_hidden_state
-        blip_t_encodings = self.blip_txt(
-            pixel_values=empty_img,
-            input_ids=blip_input_ids,
-            attention_mask=blip_attn_mask
-        ).last_hidden_state
+        # blip_i_encodings = self.blip_img(
+        #     pixel_values=blip_pixel_values,
+        #     input_ids=empty_txt,
+        #     attention_mask=empty_attn_mask
+        # ).last_hidden_state
+        # blip_t_encodings = self.blip_txt(
+        #     pixel_values=empty_img,
+        #     input_ids=blip_input_ids,
+        #     attention_mask=blip_attn_mask
+        # ).last_hidden_state
         blip_encodings = self.blip(
             pixel_values=blip_pixel_values,
             input_ids=blip_input_ids,
@@ -93,8 +93,10 @@ class FeatureExtractionLayer(nn.Module):
         """
         Feature concatenation
         """
-        image_feature = torch.cat([vit_encodings, blip_i_encodings], 1).permute(0, 2, 1)
-        txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1).pemute(0, 2, 1)
+        # image_feature = torch.cat([vit_encodings, blip_i_encodings], 1).permute(0, 2, 1)
+        # txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1).permute(0, 2, 1)
+        image_feature = vit_encodings.permute(0, 2, 1)
+        txt_feature = bert_encodings.permute(0, 2, 1)
         multimodal_feature = blip_encodings.permute(0, 2, 1)
         
         # Averaging extracted features
@@ -169,7 +171,7 @@ class FusionLayer(nn.Module):
 
     def forward(self, z):
         z_i, z_t, z_m = z
-        BSZ, _, N = z_i.shape
+        BSZ, N = z_i.shape
         
         z_m = self.encoder(z_m)
         
