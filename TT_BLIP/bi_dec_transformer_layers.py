@@ -58,19 +58,18 @@ class FeatureExtractionLayer(nn.Module):
         empty_img = self.empty_img.repeat(BSZ, 1, 1, 1)
         empty_txt = self.empty_txt.repeat(BSZ, 1)
         empty_attn_mask = self.empty_attn_mask.repeat(BSZ, 1)
-        cls_multi = torch.zeros((BSZ, 1, 768)).to(blip_pixel_values.device)
 
         # multi-modality feature extraction
         """
         ViT Last hidden state has dimension BSZ x 197 x 768 , can try taking only 
         classifier token
         """
-        vit_encodings = self.vit(pixel_values=vit_pixel_values).last_hidden_state[:, 0].unsqueeze(1)
+        vit_encodings = self.vit(pixel_values=vit_pixel_values).last_hidden_state
 
         """
         BERT Last hidden state has dimension BSZ x N + 1 x 768, can try taking only classifier token
         """
-        bert_encodings = self.bert(input_ids=bert_input_ids, attention_mask=bert_attn_mask).last_hidden_state[:, 0].unsqueeze(1)
+        bert_encodings = self.bert(input_ids=bert_input_ids, attention_mask=bert_attn_mask).last_hidden_state
 
         """
         BLIP encodings have dimension BSZ x 577 x 768
@@ -94,14 +93,19 @@ class FeatureExtractionLayer(nn.Module):
         """
         Feature concatenation
         """
-        image_feature = torch.cat([vit_encodings, blip_i_encodings], 1)
-        txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1)
-        multimodal_feature = torch.cat([cls_multi, blip_encodings], 1)
+        image_feature = torch.cat([vit_encodings, blip_i_encodings], 1).permute(0, 2, 1)
+        txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1).pemute(0, 2, 1)
+        multimodal_feature = blip_encodings.permute(0, 2, 1)
+        
+        # Averaging extracted features
+        image_feature = F.adaptive_avg_pool1d(image_feature, 1).squeeze(-1)
+        txt_feature = F.adaptive_avg_pool1d(txt_feature, 1).squeeze(-1)
+        multimodal_feature = F.adaptive_avg_pool1d(multimodal_feature, 1).squeeze(-1)
 
         # contrastive loss computation (cosine similarity)
-        l = (1.0 - F.cosine_similarity(image_feature, txt_feature)).mean()
+        l = 0.5 * (1.0 - F.cosine_similarity(image_feature, multimodal_feature)).mean()+ 0.5 * (1.0 - F.cosine_similarity(txt_feature, multimodal_feature)).mean()
 
-        # They all have dim BSZ x 578 x 768 with cls token
+        # They all have dim BSZ x 768
         return image_feature, txt_feature, multimodal_feature, l
 
 
@@ -172,8 +176,6 @@ class FusionLayer(nn.Module):
         z_i = self.decoder_img(z_m, z_i)
         z_t = self.decoder_txt(z_m, z_t)
 
-        # z_i = z_i[:, 0].unsqueeze(1)
-        # z_t = z_t[:, 0].unsqueeze(1)
 
         l = (1.0 - F.cosine_similarity(z_i, z_t)).mean()
 
@@ -188,7 +190,7 @@ class ClassificationLayer(nn.Module):
         super().__init__()
         self.global_pooling = nn.AdaptiveAvgPool1d(1)
         self.bin_classifier = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
+            nn.Linear(embed_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
@@ -198,7 +200,7 @@ class ClassificationLayer(nn.Module):
         )
 
         self.multi_classifier = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
+            nn.Linear(embed_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
@@ -211,12 +213,10 @@ class ClassificationLayer(nn.Module):
 
     def forward(self, z):
         z_i, z_t = z
-        z = torch.cat([z_i, z_t], 1).to(z_i.device)
+        z = torch.cat([z_i, z_t], 1)
 
-        cls = self.avg_pool(z.permute(0, 2, 1)).squeeze(-1)
-
-        y_bin = self.bin_classifier(cls).squeeze(-1)
-        y_multi = self.multi_classifier(cls)
+        y_bin = self.bin_classifier(z).squeeze(-1)
+        y_multi = self.multi_classifier(z)
         return y_bin, y_multi 
 
 
