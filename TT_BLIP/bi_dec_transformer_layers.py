@@ -257,7 +257,7 @@ class BiDec_Model(L.LightningModule):
         z_i, z_t, z_m, c_loss_1 = self.feature_extraction_layer(*x)
         z, c_loss_2 = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
-        return y, c_loss_1 + c_loss_2
+        return y, c_loss_1 #+ c_loss_2
     
 
     def training_step(self, batch):
