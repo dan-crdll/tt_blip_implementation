@@ -14,8 +14,8 @@ class FeatureExtractionLayer(nn.Module):
         self.vit = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").vit
         self.bert = BertModel.from_pretrained("google-bert/bert-base-uncased")      
 
-        # self.blip_img = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
-        # self.blip_txt = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        self.blip_img = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        self.blip_txt = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
         self.blip = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
 
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
@@ -28,11 +28,11 @@ class FeatureExtractionLayer(nn.Module):
         for param in self.blip.parameters():
             param.requires_grad = False
 
-        # for param in self.blip_img.parameters():
-        #     param.requires_grad = False
+        for param in self.blip_img.parameters():
+            param.requires_grad = False
         
-        # for param in self.blip_txt.parameters():
-        #     param.requires_grad = False
+        for param in self.blip_txt.parameters():
+            param.requires_grad = False
         
         trainable_layers = self.vit.encoder.layer[trainable:]
         for param in self.vit.parameters():
@@ -74,16 +74,16 @@ class FeatureExtractionLayer(nn.Module):
         """
         BLIP encodings have dimension BSZ x 577 x 768
         """
-        # blip_i_encodings = self.blip_img(
-        #     pixel_values=blip_pixel_values,
-        #     input_ids=empty_txt,
-        #     attention_mask=empty_attn_mask
-        # ).last_hidden_state
-        # blip_t_encodings = self.blip_txt(
-        #     pixel_values=empty_img,
-        #     input_ids=blip_input_ids,
-        #     attention_mask=blip_attn_mask
-        # ).last_hidden_state
+        blip_i_encodings = self.blip_img(
+            pixel_values=blip_pixel_values,
+            input_ids=empty_txt,
+            attention_mask=empty_attn_mask
+        ).last_hidden_state
+        blip_t_encodings = self.blip_txt(
+            pixel_values=empty_img,
+            input_ids=blip_input_ids,
+            attention_mask=blip_attn_mask
+        ).last_hidden_state
         blip_encodings = self.blip(
             pixel_values=blip_pixel_values,
             input_ids=blip_input_ids,
@@ -93,21 +93,14 @@ class FeatureExtractionLayer(nn.Module):
         """
         Feature concatenation
         """
-        # image_feature = torch.cat([vit_encodings, blip_i_encodings], 1).permute(0, 2, 1)
-        # txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1).permute(0, 2, 1)
-        image_feature = vit_encodings.permute(0, 2, 1)
-        txt_feature = bert_encodings.permute(0, 2, 1)
+        image_feature = torch.cat([vit_encodings, blip_i_encodings], 1)
+        txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1)
+
         multimodal_feature = blip_encodings.permute(0, 2, 1)
-        
-        # Averaging extracted features
-        image_feature = F.adaptive_avg_pool1d(image_feature, 1).squeeze(-1)
-        txt_feature = F.adaptive_avg_pool1d(txt_feature, 1).squeeze(-1)
-        multimodal_feature = F.adaptive_avg_pool1d(multimodal_feature, 1).squeeze(-1)
 
         # contrastive loss computation (cosine similarity)
         l = 0.5 * (1.0 - F.cosine_similarity(image_feature, multimodal_feature)).mean()+ 0.5 * (1.0 - F.cosine_similarity(txt_feature, multimodal_feature)).mean()
 
-        # They all have dim BSZ x 768
         return image_feature, txt_feature, multimodal_feature, l
 
 
@@ -171,18 +164,13 @@ class FusionLayer(nn.Module):
 
     def forward(self, z):
         z_i, z_t, z_m = z
-        BSZ, N = z_i.shape
         
         z_m = self.encoder(z_m)
         
         z_i = self.decoder_img(z_m, z_i)
         z_t = self.decoder_txt(z_m, z_t)
 
-
-        l = (1.0 - F.cosine_similarity(z_i, z_t)).mean()
-
-
-        return (z_i, z_t), l
+        return (z_i, z_t)
     
 """
 Classification Layer for binary (Real/Fake) classification
@@ -192,7 +180,7 @@ class ClassificationLayer(nn.Module):
         super().__init__()
         self.global_pooling = nn.AdaptiveAvgPool1d(1)
         self.bin_classifier = nn.Sequential(
-            nn.Linear(embed_dim * 2, hidden_dim),
+            nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
@@ -202,7 +190,7 @@ class ClassificationLayer(nn.Module):
         )
 
         self.multi_classifier = nn.Sequential(
-            nn.Linear(embed_dim * 2, hidden_dim),
+            nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
             nn.BatchNorm1d(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
@@ -215,7 +203,8 @@ class ClassificationLayer(nn.Module):
 
     def forward(self, z):
         z_i, z_t = z
-        z = torch.cat([z_i, z_t], 1)
+        z = torch.cat([z_i, z_t], 1).permute(0, 2, 1)
+        z = self.avg_pool(z).squeeze()
 
         y_bin = self.bin_classifier(z).squeeze(-1)
         y_multi = self.multi_classifier(z)
@@ -257,9 +246,9 @@ class BiDec_Model(L.LightningModule):
     
     def forward(self, x):
         z_i, z_t, z_m, c_loss_1 = self.feature_extraction_layer(*x)
-        z, c_loss_2 = self.fusion_layer((z_i, z_t, z_m))
+        z = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
-        return y, c_loss_1 #+ c_loss_2
+        return y, c_loss_1
     
 
     def training_step(self, batch):
