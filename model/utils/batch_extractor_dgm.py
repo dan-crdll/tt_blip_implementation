@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 from torch.utils.data import DataLoader
-from TT_BLIP.data_preprocessor import DataPreprocessor
+from model.utils.data_preprocessor import DataPreprocessor
 import torch
 from PIL import Image
 from datasets import load_dataset

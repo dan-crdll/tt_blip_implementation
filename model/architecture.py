@@ -6,30 +6,39 @@ from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
 import torch.nn.functional as F
 
+from model.layers.classification import ClassificationLayer
+from model.layers.feature_extraction import FeatureExtractionLayer
+from model.layers.fusion import FusionLayer
+
 
 """
 Complete architecture
 """
-class BiDec_Model(L.LightningModule):
+class Model(L.LightningModule):
     def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3):
         super().__init__()
+        # Model Layers
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
         self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim)
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
+
+        # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
         self.acc_fn_bin = Accuracy('binary')
-        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
         self.recall_fn = Recall('binary')
         self.auc_fn = BinaryAUROC()
 
+        # Multilabel Metrics
+        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
         self.cf1 = MultilabelF1Score(4, average='macro')
         self.of1 = MultilabelF1Score(4, average='micro')
         self.mAP = MultilabelAveragePrecision(4)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
+
         def lr_lambda(current_step):
             warmup_steps = int(0.05 * self.trainer.max_steps)
             if current_step < warmup_steps:
@@ -42,9 +51,9 @@ class BiDec_Model(L.LightningModule):
     
     def forward(self, x):
         z_i, z_t, z_m, c_loss_1 = self.feature_extraction_layer(*x)
-        z, c_loss_2 = self.fusion_layer((z_i, z_t, z_m))
+        z = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
-        return y, c_loss_1 + c_loss_2
+        return y, c_loss_1
     
 
     def training_step(self, batch):

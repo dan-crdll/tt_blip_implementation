@@ -1,13 +1,13 @@
 from model.utils.batch_extractor_dgm import DatasetLoader
-from TT_BLIP.bi_dec_transformer_layers_simplified import BiDec_Model
+from model.architecture import Model
 from lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
 import yaml
 import random
-import numpy as np
 import os
+import numpy as np
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
@@ -22,9 +22,6 @@ def seed_everything(seed=42):
 
 seed_everything()
 
-# Mantenere solo un cross attention semplice e rimuovere le 
-# skip connection e avvicinare le feature prima
-
 def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations, gpus):
     print("Downloading DGM4")
     if 'data' not in os.listdir('.'):
@@ -34,7 +31,7 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
     ds_loader = DatasetLoader(batch_size=batch_size, allowed_splits=origins+manipulations)
     train_dl, val_dl = ds_loader.get_dataloaders()
 
-    model = BiDec_Model(
+    model = Model(
             ds_loader.dp.empty_pixel_values, 
             ds_loader.dp.empty_input_ids,
             ds_loader.dp.empty_attn_mask, 
