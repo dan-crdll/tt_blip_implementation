@@ -19,7 +19,7 @@ class Model(L.LightningModule):
         super().__init__()
         # Model Layers
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
-        self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim)
+        self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim, 1, 1)
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
 
         # Binary Metrics
