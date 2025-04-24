@@ -112,7 +112,9 @@ class FeatureExtractionLayer(nn.Module):
         multimodal_feature = blip_encodings
 
         # contrastive loss computation
-        l = 0.5 * self.c_loss(image_feature, multimodal_feature) + 0.5 * self.c_loss(txt_feature, multimodal_feature)
+        l = 0.5 * self.c_loss(image_feature[:, 0], multimodal_feature[:, 0]) \
+            + 0.5 * self.c_loss(txt_feature[:, 0], multimodal_feature[:, 0]) \
+            + (1 - F.cosine_similarity(image_feature[:, 0], multimodal_feature[:, 0])).mean()
         # l = (
         #         (1 - F.cosine_similarity(image_feature[:, 0], multimodal_feature[:, 0]))
         #         + (1 - F.cosine_similarity(txt_feature[:, 0], multimodal_feature[:, 0]))
