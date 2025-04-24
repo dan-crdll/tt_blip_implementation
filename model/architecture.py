@@ -62,7 +62,7 @@ class Model(L.LightningModule):
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        loss = c_loss + multi_loss + bin_loss
+        loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -112,7 +112,7 @@ class Model(L.LightningModule):
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        loss = c_loss + multi_loss + bin_loss
+        loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
