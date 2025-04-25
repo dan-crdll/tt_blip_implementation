@@ -14,16 +14,23 @@ class ContrastiveLoss(nn.Module):
         emb_b = F.normalize(emb_b, dim=-1)
 
         logits = emb_a @ emb_b.t() / self.temp
-
         targets = torch.arange(emb_a.size(0)).to(emb_a.device)
 
-        # Cross-entropy loss (A->B)
         loss_a2b = F.cross_entropy(logits, targets)
-
-        # Cross-entropy loss (B->A)
         loss_b2a = F.cross_entropy(logits.t(), targets)
 
-        # Loss totale
         loss = (loss_a2b + loss_b2a) / 2
 
         return loss
+    
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2):
+        super().__init__()
+        self.gamma = gamma
+    
+    def forward(self, pred, true):
+        pred = F.sigmoid(pred)
+        p_t = torch.where(true == 1, pred, 1 - pred).to(pred.device)
+        l = - (1 - p_t) ** self.gamma * torch.log(p_t)
+        l = l.mean()
+        return l

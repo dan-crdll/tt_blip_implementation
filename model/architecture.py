@@ -1,11 +1,9 @@
 import torch 
 from torch import nn
-from transformers import ViTForImageClassification, BertModel, BlipForImageTextRetrieval
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-import torch.nn.functional as F
-
+from model.utils.loss_fn import FocalLoss
 from model.layers.classification import ClassificationLayer
 from model.layers.feature_extraction import FeatureExtractionLayer
 from model.layers.fusion import FusionLayer
@@ -15,7 +13,7 @@ from model.layers.fusion import FusionLayer
 Complete architecture
 """
 class Model(L.LightningModule):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3):
+    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3, gamma=2):
         super().__init__()
         # Model Layers
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
@@ -24,6 +22,7 @@ class Model(L.LightningModule):
 
         # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
+        self.focal_loss = FocalLoss(gamma)
         self.acc_fn_bin = Accuracy('binary')
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
@@ -61,7 +60,7 @@ class Model(L.LightningModule):
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+        bin_loss = self.loss_fn(pred_bin, y_bin.float()) + self.focal_loss(pred_bin, y_bin)
         loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --
@@ -111,7 +110,7 @@ class Model(L.LightningModule):
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+        bin_loss = self.loss_fn(pred_bin, y_bin.float()) + self.focal_loss(pred_bin, y_bin)
         loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --

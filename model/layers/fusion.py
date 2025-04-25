@@ -51,7 +51,7 @@ Fusion Layer for feature concatenation which uses self and
 cross attention encoders and computes contrastive loss
 """
 class FusionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, hidden_dim, num_encoders=11, num_decoders=11):
+    def __init__(self, embed_dim, num_heads, hidden_dim, num_encoders=1, num_decoders=1):
         super().__init__()
         encoder_layer = nn.TransformerEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
         decoder_layer = CrossAttnEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
