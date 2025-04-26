@@ -22,7 +22,6 @@ class Model(L.LightningModule):
 
         # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
-        self.focal_loss = FocalLoss(gamma)
         self.acc_fn_bin = Accuracy('binary')
         self.f1_fn = F1Score('binary')
         self.prec_fn = Precision('binary')
@@ -60,7 +59,8 @@ class Model(L.LightningModule):
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float()) + self.focal_loss(pred_bin, y_bin)
+        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+
         loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --
@@ -110,7 +110,8 @@ class Model(L.LightningModule):
         (pred_bin, pred_multi), c_loss = self.forward(x)
         
         multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float()) + self.focal_loss(pred_bin, y_bin)
+        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+        
         loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         # -- BINARY CLASSIFICATION --
