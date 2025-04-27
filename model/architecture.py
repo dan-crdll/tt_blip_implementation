@@ -63,7 +63,7 @@ class Model(L.LightningModule):
 
         pred, c_loss = self.forward(x)
         pred_bin = pred[:, 0]
-        
+
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
         mask = (y_bin == 0)
 
@@ -99,6 +99,9 @@ class Model(L.LightningModule):
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
+        
+        pred_multi[~mask] = 0
+
         cf1 = self.cf1(pred_multi, y_multi.float())
         of1 = self.of1(pred_multi, y_multi.float())
         mAP = self.mAP(pred_multi, y_multi.long())
@@ -166,6 +169,9 @@ class Model(L.LightningModule):
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
+
+        pred_multi[~mask] = 0
+
         cf1 = self.cf1(pred_multi, y_multi.float())
         of1 = self.of1(pred_multi, y_multi.float())
         mAP = self.mAP(pred_multi, y_multi.long())
