@@ -56,12 +56,25 @@ class Model(L.LightningModule):
 
     def training_step(self, batch):
         x, (y_bin, y_multi) = batch 
-        (pred_bin, pred_multi), c_loss = self.forward(x)
+        # (pred_bin, pred_multi), c_loss = self.forward(x)
         
-        multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+        # multi_loss = self.loss_fn(pred_multi, y_multi.float())
+        # bin_loss = self.loss_fn(pred_bin, y_bin.float())
 
-        loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
+        pred, c_loss = self.forward(x)
+
+        bin_loss = self.loss_fn(pred[:, 0], y_bin.float())
+        mask = (y_bin == 0)
+
+        pred_multi = pred[:, 1:]
+        if mask.sum() > 0:
+            multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask])
+            cls_loss = bin_loss + multi_loss
+        else:
+            cls_loss = bin_loss
+        # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
+
+        loss = c_loss + cls_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -107,12 +120,26 @@ class Model(L.LightningModule):
     
     def validation_step(self, batch):
         x, (y_bin, y_multi) = batch 
-        (pred_bin, pred_multi), c_loss = self.forward(x)
         
-        multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        bin_loss = self.loss_fn(pred_bin, y_bin.float())
+        # (pred_bin, pred_multi), c_loss = self.forward(x)
         
-        loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
+        # multi_loss = self.loss_fn(pred_multi, y_multi.float())
+        # bin_loss = self.loss_fn(pred_bin, y_bin.float())
+
+        pred, c_loss = self.forward(x)
+
+        bin_loss = self.loss_fn(pred[:, 0], y_bin.float())
+        mask = (y_bin == 0)
+
+        pred_multi = pred[:, 1:]
+        if mask.sum() > 0:
+            multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask])
+            cls_loss = bin_loss + multi_loss
+        else:
+            cls_loss = bin_loss
+        # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
+
+        loss = c_loss + cls_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
