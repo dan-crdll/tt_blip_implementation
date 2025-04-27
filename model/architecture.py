@@ -62,8 +62,9 @@ class Model(L.LightningModule):
         # bin_loss = self.loss_fn(pred_bin, y_bin.float())
 
         pred, c_loss = self.forward(x)
-
-        bin_loss = self.loss_fn(pred[:, 0], y_bin.float())
+        pred_bin = pred[:, 0]
+        
+        bin_loss = self.loss_fn(pred_bin, y_bin.float())
         mask = (y_bin == 0)
 
         pred_multi = pred[:, 1:]
@@ -120,7 +121,7 @@ class Model(L.LightningModule):
     
     def validation_step(self, batch):
         x, (y_bin, y_multi) = batch 
-        
+
         # (pred_bin, pred_multi), c_loss = self.forward(x)
         
         # multi_loss = self.loss_fn(pred_multi, y_multi.float())
@@ -128,7 +129,9 @@ class Model(L.LightningModule):
 
         pred, c_loss = self.forward(x)
 
-        bin_loss = self.loss_fn(pred[:, 0], y_bin.float())
+        pred_bin = pred[:, 0]
+
+        bin_loss = self.loss_fn(pred_bin, y_bin.float())
         mask = (y_bin == 0)
 
         pred_multi = pred[:, 1:]
