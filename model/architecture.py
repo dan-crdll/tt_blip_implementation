@@ -53,8 +53,7 @@ class Model(L.LightningModule):
         y = self.classification_layer(z)
         return y, c_loss_1
     
-
-    def training_step(self, batch):
+    def step(self, split, batch):
         x, (y_bin, y_multi) = batch 
         # (pred_bin, pred_multi), c_loss = self.forward(x)
         
@@ -75,7 +74,7 @@ class Model(L.LightningModule):
             cls_loss = bin_loss
         # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
-        loss = c_loss + cls_loss
+        loss = 0.2 * c_loss + 0.8 * cls_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -85,109 +84,46 @@ class Model(L.LightningModule):
 
         self.log_dict(
             {
-                'Train/loss_bin': bin_loss,
-                'Train/acc_bin': acc_bin
+                f'{split}/loss_bin': bin_loss,
+                f'{split}/acc_bin': acc_bin
             }, prog_bar=True, on_epoch=True, on_step=True
         )
         
         self.log_dict(
             {
-                'Train/f1_bin': f1,
-                'Train/auc_bin': auc
+                f'{split}/f1_bin': f1,
+                f'{split}/auc_bin': auc
             }, on_step=False, on_epoch=True, prog_bar=True
         )
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
         
-        pred_multi[~mask] = 0
-
-        cf1 = self.cf1(pred_multi, y_multi.float())
-        of1 = self.of1(pred_multi, y_multi.float())
-        mAP = self.mAP(pred_multi, y_multi.long())
-        acc_multi = self.acc_fn_multi(pred_multi, y_multi.float())
+        cf1 = self.cf1(pred_multi[mask], y_multi[mask].float())
+        of1 = self.of1(pred_multi[mask], y_multi[mask].float())
+        mAP = self.mAP(pred_multi[mask], y_multi[mask].long())
+        acc_multi = self.acc_fn_multi(pred_multi[mask], y_multi[mask].float())
         self.log_dict(
             {
-                'Train/cf1_multi':cf1,
-                'Train/of1_multi':of1,
-                'Train/mAP_multi': mAP,
-                'Train/acc_multi': acc_multi
+                f'{split}/cf1_multi':cf1,
+                f'{split}/of1_multi':of1,
+                f'{split}/mAP_multi': mAP,
+                f'{split}/acc_multi': acc_multi
             }, prog_bar=True, on_epoch=True, on_step=False
         )
 
-        self.log('Train/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
-        self.log('Train/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
+        self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
 
         # -- GENERAL LOSS --
-        self.log("Train/loss", loss, prog_bar=True, on_epoch=True, on_step=True)
+        self.log(f"{split}/loss", loss, prog_bar=True, on_epoch=True, on_step=True)
+        return loss 
+    
+
+    def training_step(self, batch):
+        loss = self.step("Train", batch)
         return loss 
     
     def validation_step(self, batch):
-        x, (y_bin, y_multi) = batch 
-
-        # (pred_bin, pred_multi), c_loss = self.forward(x)
-        
-        # multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        # bin_loss = self.loss_fn(pred_bin, y_bin.float())
-
-        pred, c_loss = self.forward(x)
-
-        pred_bin = pred[:, 0]
-
-        bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        mask = (y_bin == 0)
-
-        pred_multi = pred[:, 1:]
-        if mask.sum() > 0:
-            multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask])
-            cls_loss = bin_loss + multi_loss
-        else:
-            cls_loss = bin_loss
-        # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
-
-        loss = c_loss + cls_loss
-
-        # -- BINARY CLASSIFICATION --
-        pred_bin = nn.functional.sigmoid(pred_bin)
-        acc_bin = self.acc_fn_bin(pred_bin, y_bin.float())
-        f1 = self.f1_fn(pred_bin, y_bin.float())
-        auc = self.auc_fn(pred_bin, y_bin.float())
-
-        self.log_dict(
-            {
-                'Val/loss_bin': bin_loss,
-                'Val/acc_bin': acc_bin
-            }, prog_bar=True, on_epoch=True, on_step=False
-        )
-        
-        self.log_dict(
-            {
-                'Val/f1_bin': f1,
-                'Val/auc_bin': auc
-            }, on_step=False, on_epoch=True, prog_bar=True
-        )
-
-        # -- MULTILABEL CLASSIFICATION --
-        pred_multi = nn.functional.sigmoid(pred_multi)
-
-        pred_multi[~mask] = 0
-
-        cf1 = self.cf1(pred_multi, y_multi.float())
-        of1 = self.of1(pred_multi, y_multi.float())
-        mAP = self.mAP(pred_multi, y_multi.long())
-        acc_multi = self.acc_fn_multi(pred_multi, y_multi.float())
-        self.log_dict(
-            {
-                'Val/cf1_multi':cf1,
-                'Val/of1_multi':of1,
-                'Val/mAP_multi': mAP,
-                'Val/acc_multi': acc_multi
-            }, prog_bar=True, on_epoch=True, on_step=False
-        )
-
-        self.log('Val/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=False)
-        self.log('Val/con_loss', c_loss, prog_bar=True, on_epoch=True, on_step=False)
-
-        # -- GENERAL LOSS --
-        self.log("Val/loss", loss, prog_bar=True, on_epoch=True, on_step=False)
-        return loss 
+        loss = self.step("Val", batch)
+        return loss
