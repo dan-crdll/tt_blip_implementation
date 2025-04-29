@@ -94,8 +94,9 @@ class Model(L.LightningModule):
         self.log_dict(
             {
                 f'{split}/loss_bin': bin_loss,
-                f'{split}/acc_bin': acc_bin
-            }, prog_bar=True, on_epoch=True, on_step=True
+                f'{split}/acc_bin': acc_bin,
+                f'{split}/contrastive_loss': c_loss
+            }, prog_bar=True, on_epoch=True, on_step=True if split == 'Train' else False
         )
         
         self.log_dict(
