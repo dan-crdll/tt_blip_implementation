@@ -20,6 +20,7 @@ class ContrastiveLoss(nn.Module):
         B = query.size(0)
         K = key.size(0)
 
+
         # Normalize embeddings
         query = F.normalize(query, dim=-1)
         key = F.normalize(key, dim=-1)
@@ -41,7 +42,8 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
         self.momentum_encoder = momentum_encoder
-
+        self.K = K
+        
         self.queue_i = deque([])
         self.queue_t = deque([])
         self.queue_m = deque([])
@@ -56,18 +58,22 @@ class ManipulationAwareContrastiveLoss(nn.Module):
                 prev_t = self.queue_t.pop()
                 prev_m = self.queue_m.pop()
 
-                z_i = torch.vstack([z_i, prev_i])
-                z_t = torch.vstack([z_t, prev_t])
-                z_m = torch.vstack([z_m, prev_m])
+                z_i = torch.vstack([z_i[:, 0], prev_i])
+                z_t = torch.vstack([z_t[:, 0], prev_t])
+                z_m = torch.vstack([z_m[:, 0], prev_m])
+            else:
+                z_i = z_i[:, 0]
+                z_t = z_t[:, 0]
+                z_m = z_m[:, 0]
         
-        l_i2m = self.loss(img_cls, z_m[:, 0])
-        l_t2m = self.loss(txt_cls, z_m[:, 0])
+        l_i2m = self.loss(img_cls, z_m)
+        l_t2m = self.loss(txt_cls, z_m)
 
-        l_i2t = self.loss(img_cls, z_t[:, 0])
-        l_t2i = self.loss(txt_cls, z_i[:, 0])
+        l_i2t = self.loss(img_cls, z_t)
+        l_t2i = self.loss(txt_cls, z_i)
 
-        l_i2i = self.loss(img_cls, z_i[:, 0])
-        l_t2t = self.loss(txt_cls, z_t[:, 0])
+        l_i2i = self.loss(img_cls, z_i)
+        l_t2t = self.loss(txt_cls, z_t)
 
         loss = 1/6 * (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t)
 

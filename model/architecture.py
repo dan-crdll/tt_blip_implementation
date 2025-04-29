@@ -3,7 +3,6 @@ from torch import nn
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-from model.utils.loss_fn import FocalLoss
 from model.layers.classification import ClassificationLayer
 from model.layers.feature_extraction import FeatureExtractionLayer
 from model.layers.fusion import FusionLayer
@@ -53,7 +52,7 @@ class Model(L.LightningModule):
     
     def forward(self, x):
         z_i, z_t, z_m = self.feature_extraction_layer(*x)
-        c_loss = self.c_loss(z_i, z_t, z_m, self.feature_extraction_layer.parameters(), x)
+        c_loss = self.c_loss(z_i[:, 0], z_t[:, 0], z_m[:, 0], self.feature_extraction_layer.parameters(), x)
         z = self.fusion_layer((z_i[:, 0], z_t[:, 0], z_m[:, 0]))
         y = self.classification_layer(z)
         return y, c_loss
