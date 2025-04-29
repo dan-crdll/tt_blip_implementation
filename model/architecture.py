@@ -7,7 +7,7 @@ from model.utils.loss_fn import FocalLoss
 from model.layers.classification import ClassificationLayer
 from model.layers.feature_extraction import FeatureExtractionLayer
 from model.layers.fusion import FusionLayer
-
+from model.utils.loss_fn import ManipulationAwareContrastiveLoss
 
 """
 Complete architecture
@@ -17,6 +17,10 @@ class Model(L.LightningModule):
         super().__init__()
         # Model Layers
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
+        
+        momentum_encoder = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
+        self.c_loss = ManipulationAwareContrastiveLoss(0.8, momentum_encoder)
+
         self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim, 1, 1)
         self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
 
@@ -48,10 +52,11 @@ class Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, x):
-        z_i, z_t, z_m, c_loss_1 = self.feature_extraction_layer(*x)
-        z = self.fusion_layer((z_i, z_t, z_m))
+        z_i, z_t, z_m = self.feature_extraction_layer(*x)
+        c_loss = self.c_loss(z_i, z_t, z_m, self.feature_extraction_layer.parameters(), x)
+        z = self.fusion_layer((z_i[:, 0], z_t[:, 0], z_m[:, 0]))
         y = self.classification_layer(z)
-        return y, c_loss_1
+        return y, c_loss
     
     def step(self, split, batch):
         x, (y_bin, y_multi) = batch 

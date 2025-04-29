@@ -1,7 +1,6 @@
 import torch 
 from torch import nn
 from transformers import ViTForImageClassification, BertModel, BlipForImageTextRetrieval
-from model.utils.loss_fn import ManipulationAwareContrastiveLoss
 import torch.nn.functional as F
 
 
@@ -22,9 +21,6 @@ class FeatureExtractionLayer(nn.Module):
         self.empty_img = nn.Parameter(empty_img, requires_grad=False)
         self.empty_txt = nn.Parameter(empty_txt, requires_grad=False)
         self.empty_attn_mask = nn.Parameter(empty_attn_mask, requires_grad=False)
-
-        # Contrastive loss
-        self.c_loss = ManipulationAwareContrastiveLoss(temp=0.7)
 
         self.initialize_training_mode(trainable)
 
@@ -107,14 +103,6 @@ class FeatureExtractionLayer(nn.Module):
         image_feature = torch.cat([vit_encodings, blip_i_encodings], 1)
         txt_feature = torch.cat([bert_encodings, blip_t_encodings], 1)
         multimodal_feature = blip_encodings
-
-        # contrastive loss computation
-        l = self.c_loss(image_feature[:, 0], txt_feature[:, 0], multimodal_feature[:, 0])
-        # l = (
-        #         (1 - F.cosine_similarity(image_feature[:, 0], multimodal_feature[:, 0]))
-        #         + (1 - F.cosine_similarity(txt_feature[:, 0], multimodal_feature[:, 0]))
-        #     ).mean()
-
         # They all have dim BSZ x 577 x 768
-        return image_feature, txt_feature, multimodal_feature, l
+        return image_feature, txt_feature, multimodal_feature
 

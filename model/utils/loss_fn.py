@@ -1,49 +1,84 @@
 import torch 
 from torch import nn 
 import torch.nn.functional as F
+from model.layers.feature_extraction import FeatureExtractionLayer
+from collections import deque
 
 
 class ContrastiveLoss(nn.Module):
     def __init__(self, temp=1.0):
         super().__init__()
-
         self.temp = temp 
 
-    def forward(self, emb_a, emb_b):
-        emb_a = F.normalize(emb_a, dim=-1)
-        emb_b = F.normalize(emb_b, dim=-1)
+    def forward(self, query, key):
+        """
+        query: Tensor of shape (B, D)
+        key:   Tensor of shape (B + N, D)
+               where the first B entries are the true positives (aligned with query),
+               and the remaining N are negatives.
+        """
+        B = query.size(0)
+        K = key.size(0)
 
-        logits = emb_a @ emb_b.t() / self.temp
-        targets = torch.arange(emb_a.size(0)).to(emb_a.device)
+        # Normalize embeddings
+        query = F.normalize(query, dim=-1)
+        key = F.normalize(key, dim=-1)
 
-        loss_a2b = F.cross_entropy(logits, targets)
-        loss_b2a = F.cross_entropy(logits.t(), targets)
+        # Compute similarity scores: (B, B+N)
+        logits = torch.matmul(query, key.T) / self.temp
 
-        loss = (loss_a2b + loss_b2a) / 2
+        # Targets: for each query[i], the correct key is at position i
+        targets = torch.arange(B, device=query.device)
+
+        # Cross-entropy loss between query-key similarities and targets
+        loss = F.cross_entropy(logits, targets)
 
         return loss
-    
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=2):
-        super().__init__()
-        self.gamma = gamma
-    
-    def forward(self, pred, true):
-        pred = F.sigmoid(pred)
-        p_t = torch.where(true == 1, pred, 1 - pred).to(pred.device)
-        l = - (1 - p_t) ** self.gamma * torch.log(p_t)
-        l = l.mean()
-        return l
+        
     
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp):
+    def __init__(self, temp, momentum_encoder:FeatureExtractionLayer, m=0.9, K=100):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
-    
-    def forward(self, img_cls, txt_cls, blip_enc):
-        l_vt = self.loss(img_cls, txt_cls)
-        l_vb = self.loss(img_cls, blip_enc)
-        l_tb = self.loss(txt_cls, blip_enc)
+        self.momentum_encoder = momentum_encoder
 
-        l = 1/3 * (l_vt + l_vb + l_tb)
-        return l
+        self.queue_i = deque([])
+        self.queue_t = deque([])
+        self.queue_m = deque([])
+
+    
+    def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
+        with torch.no_grad():
+            z_i, z_t, z_m = self.momentum_encoder(*batch)
+
+            if len(self.queue_i) > 0:
+                prev_i = self.queue_i.pop()
+                prev_t = self.queue_t.pop()
+                prev_m = self.queue_m.pop()
+
+                z_i = torch.vstack([z_i, prev_i])
+                z_t = torch.vstack([z_t, prev_t])
+                z_m = torch.vstack([z_m, prev_m])
+        
+        l_i2m = self.loss(img_cls, z_m[:, 0])
+        l_t2m = self.loss(txt_cls, z_m[:, 0])
+
+        l_i2t = self.loss(img_cls, z_t[:, 0])
+        l_t2i = self.loss(txt_cls, z_i[:, 0])
+
+        l_i2i = self.loss(img_cls, z_i[:, 0])
+        l_t2t = self.loss(txt_cls, z_t[:, 0])
+
+        loss = 1/6 * (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t)
+
+        self.queue_i.append(z_i)
+        self.queue_t.append(z_m)
+        self.queue_m.append(z_t)
+        self.queue_i = self.queue_i[-self.K:]
+        self.queue_t = self.queue_t[-self.K:]
+        self.queue_m = self.queue_m[-self.K:]
+
+        for i, param in enumerate(self.momentum_encoder.parameters()):
+            param.data = param.data * self.m + parameters[i].data * (1 - self.m)
+
+        return loss
