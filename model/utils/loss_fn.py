@@ -34,3 +34,15 @@ class FocalLoss(nn.Module):
         l = - (1 - p_t) ** self.gamma * torch.log(p_t)
         l = l.mean()
         return l
+    
+class ManipulationAwareContrastiveLoss(nn.Module):
+    def __init__(self, temp):
+        self.loss = ContrastiveLoss(temp)
+    
+    def forward(self, img_cls, txt_cls, blip_enc):
+        l_vt = self.loss(img_cls, txt_cls)
+        l_vb = self.loss(img_cls, blip_enc)
+        l_tb = self.loss(txt_cls, blip_enc)
+
+        l = 1/3 * (l_vt + l_vb + l_tb)
+        return l

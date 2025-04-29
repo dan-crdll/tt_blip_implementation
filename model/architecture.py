@@ -74,7 +74,7 @@ class Model(L.LightningModule):
             cls_loss = bin_loss
         # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
-        loss = 0.2 * c_loss + 0.8 * cls_loss
+        loss = c_loss + cls_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
@@ -112,8 +112,12 @@ class Model(L.LightningModule):
             }, prog_bar=True, on_epoch=True, on_step=False
         )
 
-        self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
-        self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        if split == 'Train':
+            self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
+            self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        else:
+            self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=False)
+            self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=True, on_step=False)
 
         # -- GENERAL LOSS --
         self.log(f"{split}/loss", loss, prog_bar=True, on_epoch=True, on_step=True)

@@ -1,10 +1,7 @@
 import torch 
 from torch import nn
 from transformers import ViTForImageClassification, BertModel, BlipForImageTextRetrieval
-from model.utils.loss_fn import ContrastiveLoss
-import lightning as L
-from torchmetrics import Accuracy, F1Score, Precision, Recall
-from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
+from model.utils.loss_fn import ManipulationAwareContrastiveLoss
 import torch.nn.functional as F
 
 
@@ -27,7 +24,7 @@ class FeatureExtractionLayer(nn.Module):
         self.empty_attn_mask = nn.Parameter(empty_attn_mask, requires_grad=False)
 
         # Contrastive loss
-        self.c_loss = ContrastiveLoss(temp=0.7)
+        self.c_loss = ManipulationAwareContrastiveLoss(temp=0.7)
 
         self.initialize_training_mode(trainable)
 
@@ -112,9 +109,7 @@ class FeatureExtractionLayer(nn.Module):
         multimodal_feature = blip_encodings
 
         # contrastive loss computation
-        l = 0.5 * self.c_loss(image_feature[:, 0], multimodal_feature[:, 0]) \
-            + 0.5 * self.c_loss(txt_feature[:, 0], multimodal_feature[:, 0]) \
-            + (1 - F.cosine_similarity(image_feature[:, 0], multimodal_feature[:, 0])).mean()
+        l = self.c_loss(image_feature[:, 0], txt_feature[:, 0], multimodal_feature[:, 0])
         # l = (
         #         (1 - F.cosine_similarity(image_feature[:, 0], multimodal_feature[:, 0]))
         #         + (1 - F.cosine_similarity(txt_feature[:, 0], multimodal_feature[:, 0]))
