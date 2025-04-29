@@ -37,6 +37,7 @@ class FocalLoss(nn.Module):
     
 class ManipulationAwareContrastiveLoss(nn.Module):
     def __init__(self, temp):
+        super().__init__()
         self.loss = ContrastiveLoss(temp)
     
     def forward(self, img_cls, txt_cls, blip_enc):
