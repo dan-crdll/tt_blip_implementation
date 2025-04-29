@@ -39,10 +39,10 @@ class ContrastiveLoss(nn.Module):
     
 
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp, momentum_encoder: FeatureExtractionLayer, m=0.9, K=100):
+    def __init__(self, temp, momentum_encoder, m=0.9, K=100):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
-        self.momentum_encoder = momentum_encoder
+        self.vit_momentum, self.bert_momentum, self.blip_momentum = momentum_encoder
         self.K = K
         self.m = m
 
@@ -50,12 +50,31 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_t = deque(maxlen=K)
         self.queue_m = deque(maxlen=K)
 
-        for param in self.momentum_encoder.parameters():
+        for param in self.vit_momentum.parameters():
+            param.requires_grad = False
+        for param in self.bert_momentum.parameters():
+            param.requires_grad = False
+        for param in self.blip_momentum.parameters():
             param.requires_grad = False
 
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
         with torch.no_grad():
-            z_i, z_t, z_m = self.momentum_encoder(*batch)
+            blip_pixel_values, \
+            blip_input_ids, \
+            blip_attn_mask, \
+            vit_pixel_values, \
+            bert_input_ids, \
+            bert_attn_mask = batch
+            
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask)
+            z_m = self.blip_momentum(
+                pixel_values=blip_pixel_values,
+                input_ids=blip_input_ids.long(),
+                attention_mask=blip_attn_mask
+            ).last_hidden_state
+
+
             z_i = z_i[:, 0, :]
             z_t = z_t[:, 0, :]
             z_m = z_m[:, 0, :]
@@ -83,9 +102,16 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_m.append(z_m.detach())
 
         # momentum update
-        
-        parameters = list(parameters)  # converte il generator in lista
+        parameters_vit, parameters_bert, parameters_blip = parameters
+        parameters_vit = list(parameters_vit)
+        parameters_bert = list(parameters_bert)
+        parameters_blip = list(parameters_blip)
 
-        for i, param in enumerate(self.momentum_encoder.parameters()):
-            param.data = param.data * self.m + parameters[i].data * (1 - self.m)
+        for i, param in enumerate(self.vit_momentum.parameters()):
+            param.data = param.data * self.m + parameters_vit[i].data * (1 - self.m)
+        for i, param in enumerate(self.bert_momentum.parameters()):
+            param.data = param.data * self.m + parameters_bert[i].data * (1 - self.m)
+        for i, param in enumerate(self.blip_momentum.parameters()):
+            param.data = param.data * self.m + parameters_blip[i].data * (1 - self.m)
+
         return loss

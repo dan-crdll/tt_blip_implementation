@@ -7,6 +7,7 @@ from model.layers.classification import ClassificationLayer
 from model.layers.feature_extraction import FeatureExtractionLayer
 from model.layers.fusion import FusionLayer
 from model.utils.loss_fn import ManipulationAwareContrastiveLoss
+import copy
 
 """
 Complete architecture
@@ -17,7 +18,7 @@ class Model(L.LightningModule):
         # Model Layers
         self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
         
-        momentum_encoder = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
+        momentum_encoder = (copy.deepcopy(self.feature_extraction_layer.vit), copy.deepcopy(self.feature_extraction_layer.bert), copy.deepcopy(self.feature_extraction_layer.blip))
         self.c_loss = ManipulationAwareContrastiveLoss(0.8, momentum_encoder)
 
         self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim, 1, 1)
@@ -52,7 +53,11 @@ class Model(L.LightningModule):
     
     def forward(self, x):
         z_i, z_t, z_m = self.feature_extraction_layer(*x)
-        c_loss = self.c_loss(z_i[:, 0], z_t[:, 0], z_m[:, 0], self.feature_extraction_layer.parameters(), x)
+        c_loss = self.c_loss(z_i[:, 0], 
+                            z_t[:, 0], 
+                            z_m[:, 0], 
+                            (self.feature_extraction_layer.vit.parameters(), self.feature_extraction_layer.bert.parameters(), self.feature_extraction_layer.blip.parameters()),
+                            x)
         z = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
         return y, c_loss
