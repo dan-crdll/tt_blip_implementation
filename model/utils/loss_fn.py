@@ -39,10 +39,15 @@ class ContrastiveLoss(nn.Module):
     
 
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp, momentum_encoder, m=0.9, K=100):
+    def __init__(self, temp, momentum_encoder, m=0.9, K=2):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
         self.vit_momentum, self.bert_momentum, self.blip_momentum = momentum_encoder
+
+        self.vit_momentum.to('cpu')
+        self.bert_momentum.to('cpu')
+        self.blip_momentum.to('cpu')
+
         self.K = K
         self.m = m
 
@@ -58,6 +63,8 @@ class ManipulationAwareContrastiveLoss(nn.Module):
             param.requires_grad = False
 
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
+        device = img_cls.device  
+
         with torch.no_grad():
             blip_pixel_values, \
             blip_input_ids, \
@@ -65,15 +72,13 @@ class ManipulationAwareContrastiveLoss(nn.Module):
             vit_pixel_values, \
             bert_input_ids, \
             bert_attn_mask = batch
-            
-            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
-            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask)
-            z_m = self.blip_momentum(
-                pixel_values=blip_pixel_values,
-                input_ids=blip_input_ids.long(),
-                attention_mask=blip_attn_mask
-            ).last_hidden_state
 
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values.cpu()).last_hidden_state
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long().cpu(),
+                                    attention_mask=bert_attn_mask.cpu()).last_hidden_state
+            z_m = self.blip_momentum(pixel_values=blip_pixel_values.cpu(),
+                                    input_ids=blip_input_ids.long().cpu(),
+                                    attention_mask=blip_attn_mask.cpu()).last_hidden_state
 
             z_i = z_i[:, 0, :]
             z_t = z_t[:, 0, :]
@@ -88,6 +93,11 @@ class ManipulationAwareContrastiveLoss(nn.Module):
                 z_t = torch.cat([z_t, prev_t], dim=0)
                 z_m = torch.cat([z_m, prev_m], dim=0)
 
+        # Portiamo tutto su GPU prima della loss
+        z_i = z_i.to(device)
+        z_t = z_t.to(device)
+        z_m = z_m.to(device)
+
         l_i2m = self.loss(img_cls, z_m)
         l_t2m = self.loss(txt_cls, z_m)
         l_i2t = self.loss(img_cls, z_t)
@@ -97,21 +107,20 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
         loss = (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t) / 6
 
-        self.queue_i.append(z_i.detach())
-        self.queue_t.append(z_t.detach())
-        self.queue_m.append(z_m.detach())
+        self.queue_i.append(z_i.detach().cpu())
+        self.queue_t.append(z_t.detach().cpu())
+        self.queue_m.append(z_m.detach().cpu())
 
-        # momentum update
         parameters_vit, parameters_bert, parameters_blip = parameters
         parameters_vit = list(parameters_vit)
         parameters_bert = list(parameters_bert)
         parameters_blip = list(parameters_blip)
 
         for i, param in enumerate(self.vit_momentum.parameters()):
-            param.data = param.data * self.m + parameters_vit[i].data * (1 - self.m)
+            param.data = param.data * self.m + parameters_vit[i].data.cpu() * (1 - self.m)
         for i, param in enumerate(self.bert_momentum.parameters()):
-            param.data = param.data * self.m + parameters_bert[i].data * (1 - self.m)
+            param.data = param.data * self.m + parameters_bert[i].data.cpu() * (1 - self.m)
         for i, param in enumerate(self.blip_momentum.parameters()):
-            param.data = param.data * self.m + parameters_blip[i].data * (1 - self.m)
+            param.data = param.data * self.m + parameters_blip[i].data.cpu() * (1 - self.m)
 
         return loss
