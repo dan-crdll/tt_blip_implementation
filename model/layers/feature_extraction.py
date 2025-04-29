@@ -66,7 +66,7 @@ class FeatureExtractionLayer(nn.Module):
         
         # Repeat empty tensors to match the batch size
         empty_img = self.empty_img.repeat(BSZ, 1, 1, 1)
-        empty_txt = self.empty_txt.repeat(BSZ, 1)
+        empty_txt = self.empty_txt.repeat(BSZ, 1).long()
         empty_attn_mask = self.empty_attn_mask.repeat(BSZ, 1)
 
         # multi-modality feature extraction
@@ -78,24 +78,24 @@ class FeatureExtractionLayer(nn.Module):
         """
         BERT Last hidden state has dimension BSZ x N + 1 x 768
         """
-        bert_encodings = self.bert(input_ids=bert_input_ids, attention_mask=bert_attn_mask).last_hidden_state[:, 0].unsqueeze(1)
+        bert_encodings = self.bert(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0].unsqueeze(1)
 
         """
         BLIP encodings have dimension BSZ x 577 x 768
         """
         blip_i_encodings = self.blip_img(
             pixel_values=blip_pixel_values,
-            input_ids=empty_txt,
+            input_ids=empty_txt.long(),
             attention_mask=empty_attn_mask
         ).last_hidden_state[:, 1:]
         blip_t_encodings = self.blip_txt(
             pixel_values=empty_img,
-            input_ids=blip_input_ids,
+            input_ids=blip_input_ids.long(),
             attention_mask=blip_attn_mask
         ).last_hidden_state[:, 1:]
         blip_encodings = self.blip(
             pixel_values=blip_pixel_values,
-            input_ids=blip_input_ids,
+            input_ids=blip_input_ids.long(),
             attention_mask=blip_attn_mask
         ).last_hidden_state
 

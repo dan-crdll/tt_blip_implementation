@@ -46,7 +46,6 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.K = K
         self.m = m
 
-        # maxlen garantisce rimozione automatica dei vecchi
         self.queue_i = deque(maxlen=K)
         self.queue_t = deque(maxlen=K)
         self.queue_m = deque(maxlen=K)
@@ -76,13 +75,13 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
         loss = (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t) / 6
 
-        # enqueue nuovi valori
         self.queue_i.append(z_i.detach())
         self.queue_t.append(z_t.detach())
         self.queue_m.append(z_m.detach())
 
         # momentum update
+        
+        parameters = list(parameters)  # converte il generator in lista
+
         for i, param in enumerate(self.momentum_encoder.parameters()):
             param.data = param.data * self.m + parameters[i].data * (1 - self.m)
-
-        return loss

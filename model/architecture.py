@@ -53,7 +53,7 @@ class Model(L.LightningModule):
     def forward(self, x):
         z_i, z_t, z_m = self.feature_extraction_layer(*x)
         c_loss = self.c_loss(z_i[:, 0], z_t[:, 0], z_m[:, 0], self.feature_extraction_layer.parameters(), x)
-        z = self.fusion_layer((z_i[:, 0], z_t[:, 0], z_m[:, 0]))
+        z = self.fusion_layer((z_i, z_t, z_m))
         y = self.classification_layer(z)
         return y, c_loss
     
