@@ -64,7 +64,7 @@ class Model(L.LightningModule):
         pred_bin = pred[:, 0]
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        mask = (y_bin == 0)
+        mask = (nn.functional.sigmoid(pred_bin) < 0.5)
 
         pred_multi = pred[:, 1:]
         if mask.sum() > 0:
