@@ -37,53 +37,51 @@ class ContrastiveLoss(nn.Module):
         return loss
         
     
+
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp, momentum_encoder:FeatureExtractionLayer, m=0.9, K=100):
+    def __init__(self, temp, momentum_encoder: FeatureExtractionLayer, m=0.9, K=100):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
         self.momentum_encoder = momentum_encoder
         self.K = K
-        
-        self.queue_i = deque([])
-        self.queue_t = deque([])
-        self.queue_m = deque([])
+        self.m = m
 
-    
+        # maxlen garantisce rimozione automatica dei vecchi
+        self.queue_i = deque(maxlen=K)
+        self.queue_t = deque(maxlen=K)
+        self.queue_m = deque(maxlen=K)
+
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
         with torch.no_grad():
             z_i, z_t, z_m = self.momentum_encoder(*batch)
+            z_i = z_i[:, 0, :]
+            z_t = z_t[:, 0, :]
+            z_m = z_m[:, 0, :]
 
             if len(self.queue_i) > 0:
-                prev_i = self.queue_i.pop()
-                prev_t = self.queue_t.pop()
-                prev_m = self.queue_m.pop()
+                prev_i = torch.cat(list(self.queue_i), dim=0)
+                prev_t = torch.cat(list(self.queue_t), dim=0)
+                prev_m = torch.cat(list(self.queue_m), dim=0)
 
-                z_i = torch.vstack([z_i[:, 0], prev_i])
-                z_t = torch.vstack([z_t[:, 0], prev_t])
-                z_m = torch.vstack([z_m[:, 0], prev_m])
-            else:
-                z_i = z_i[:, 0]
-                z_t = z_t[:, 0]
-                z_m = z_m[:, 0]
-        
+                z_i = torch.cat([z_i, prev_i], dim=0)
+                z_t = torch.cat([z_t, prev_t], dim=0)
+                z_m = torch.cat([z_m, prev_m], dim=0)
+
         l_i2m = self.loss(img_cls, z_m)
         l_t2m = self.loss(txt_cls, z_m)
-
         l_i2t = self.loss(img_cls, z_t)
         l_t2i = self.loss(txt_cls, z_i)
-
         l_i2i = self.loss(img_cls, z_i)
         l_t2t = self.loss(txt_cls, z_t)
 
-        loss = 1/6 * (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t)
+        loss = (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t) / 6
 
-        self.queue_i.append(z_i)
-        self.queue_t.append(z_m)
-        self.queue_m.append(z_t)
-        self.queue_i = self.queue_i[-self.K:]
-        self.queue_t = self.queue_t[-self.K:]
-        self.queue_m = self.queue_m[-self.K:]
+        # enqueue nuovi valori
+        self.queue_i.append(z_i.detach())
+        self.queue_t.append(z_t.detach())
+        self.queue_m.append(z_m.detach())
 
+        # momentum update
         for i, param in enumerate(self.momentum_encoder.parameters()):
             param.data = param.data * self.m + parameters[i].data * (1 - self.m)
 
