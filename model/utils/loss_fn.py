@@ -50,6 +50,9 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_t = deque(maxlen=K)
         self.queue_m = deque(maxlen=K)
 
+        for param in self.momentum_encoder.parameters():
+            param.requires_grad = False
+
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
         with torch.no_grad():
             z_i, z_t, z_m = self.momentum_encoder(*batch)
@@ -85,3 +88,4 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
         for i, param in enumerate(self.momentum_encoder.parameters()):
             param.data = param.data * self.m + parameters[i].data * (1 - self.m)
+        return loss
