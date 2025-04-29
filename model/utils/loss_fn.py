@@ -1,14 +1,13 @@
-import torch 
-from torch import nn 
+import torch
+from torch import nn
 import torch.nn.functional as F
-from model.layers.feature_extraction import FeatureExtractionLayer
 from collections import deque
 
 
 class ContrastiveLoss(nn.Module):
     def __init__(self, temp=1.0):
         super().__init__()
-        self.temp = temp 
+        self.temp = temp
 
     def forward(self, query, key):
         """
@@ -18,8 +17,6 @@ class ContrastiveLoss(nn.Module):
                and the remaining N are negatives.
         """
         B = query.size(0)
-        K = key.size(0)
-
 
         # Normalize embeddings
         query = F.normalize(query, dim=-1)
@@ -33,21 +30,14 @@ class ContrastiveLoss(nn.Module):
 
         # Cross-entropy loss between query-key similarities and targets
         loss = F.cross_entropy(logits, targets)
-
         return loss
-        
-    
+
 
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp, momentum_encoder, m=0.9, K=2):
+    def __init__(self, temp, momentum_encoder, m=0.9, K=8):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
         self.vit_momentum, self.bert_momentum, self.blip_momentum = momentum_encoder
-
-        self.vit_momentum.to('cpu')
-        self.bert_momentum.to('cpu')
-        self.blip_momentum.to('cpu')
-
         self.K = K
         self.m = m
 
@@ -55,15 +45,13 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_t = deque(maxlen=K)
         self.queue_m = deque(maxlen=K)
 
-        for param in self.vit_momentum.parameters():
-            param.requires_grad = False
-        for param in self.bert_momentum.parameters():
-            param.requires_grad = False
-        for param in self.blip_momentum.parameters():
-            param.requires_grad = False
+        # Freeze momentum encoders
+        for model in [self.vit_momentum, self.bert_momentum, self.blip_momentum]:
+            for param in model.parameters():
+                param.requires_grad = False
 
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
-        device = img_cls.device  
+        device = img_cls.device
 
         with torch.no_grad():
             blip_pixel_values, \
@@ -73,31 +61,24 @@ class ManipulationAwareContrastiveLoss(nn.Module):
             bert_input_ids, \
             bert_attn_mask = batch
 
-            z_i = self.vit_momentum(pixel_values=vit_pixel_values.cpu()).last_hidden_state
-            z_t = self.bert_momentum(input_ids=bert_input_ids.long().cpu(),
-                                    attention_mask=bert_attn_mask.cpu()).last_hidden_state
-            z_m = self.blip_momentum(pixel_values=blip_pixel_values.cpu(),
-                                    input_ids=blip_input_ids.long().cpu(),
-                                    attention_mask=blip_attn_mask.cpu()).last_hidden_state
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state[:, 0, :]
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(),
+                                     attention_mask=bert_attn_mask).last_hidden_state[:, 0, :]
+            z_m = self.blip_momentum(pixel_values=blip_pixel_values,
+                                     input_ids=blip_input_ids.long(),
+                                     attention_mask=blip_attn_mask).last_hidden_state[:, 0, :]
 
-            z_i = z_i[:, 0, :]
-            z_t = z_t[:, 0, :]
-            z_m = z_m[:, 0, :]
-
+            # Concatenate memory queue
             if len(self.queue_i) > 0:
-                prev_i = torch.cat(list(self.queue_i), dim=0)
-                prev_t = torch.cat(list(self.queue_t), dim=0)
-                prev_m = torch.cat(list(self.queue_m), dim=0)
+                prev_i = torch.cat(list(self.queue_i), dim=0).to(device)
+                prev_t = torch.cat(list(self.queue_t), dim=0).to(device)
+                prev_m = torch.cat(list(self.queue_m), dim=0).to(device)
 
                 z_i = torch.cat([z_i, prev_i], dim=0)
                 z_t = torch.cat([z_t, prev_t], dim=0)
                 z_m = torch.cat([z_m, prev_m], dim=0)
 
-        # Portiamo tutto su GPU prima della loss
-        z_i = z_i.to(device)
-        z_t = z_t.to(device)
-        z_m = z_m.to(device)
-
+        # Compute contrastive losses
         l_i2m = self.loss(img_cls, z_m)
         l_t2m = self.loss(txt_cls, z_m)
         l_i2t = self.loss(img_cls, z_t)
@@ -107,20 +88,20 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
         loss = (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t) / 6
 
-        self.queue_i.append(z_i.detach().cpu())
-        self.queue_t.append(z_t.detach().cpu())
-        self.queue_m.append(z_m.detach().cpu())
+        # Update queues (detach to avoid autograd tracking)
+        self.queue_i.append(z_i[:img_cls.size(0)].detach())
+        self.queue_t.append(z_t[:txt_cls.size(0)].detach())
+        self.queue_m.append(z_m[:img_cls.size(0)].detach())
 
+        # Momentum encoder update
         parameters_vit, parameters_bert, parameters_blip = parameters
-        parameters_vit = list(parameters_vit)
-        parameters_bert = list(parameters_bert)
-        parameters_blip = list(parameters_blip)
 
-        for i, param in enumerate(self.vit_momentum.parameters()):
-            param.data = param.data * self.m + parameters_vit[i].data.cpu() * (1 - self.m)
-        for i, param in enumerate(self.bert_momentum.parameters()):
-            param.data = param.data * self.m + parameters_bert[i].data.cpu() * (1 - self.m)
-        for i, param in enumerate(self.blip_momentum.parameters()):
-            param.data = param.data * self.m + parameters_blip[i].data.cpu() * (1 - self.m)
+        with torch.no_grad():
+            for p_model, p_main in zip(self.vit_momentum.parameters(), parameters_vit):
+                p_model.copy_(p_model * self.m + p_main * (1 - self.m))
+            for p_model, p_main in zip(self.bert_momentum.parameters(), parameters_bert):
+                p_model.copy_(p_model * self.m + p_main * (1 - self.m))
+            for p_model, p_main in zip(self.blip_momentum.parameters(), parameters_blip):
+                p_model.copy_(p_model * self.m + p_main * (1 - self.m))
 
         return loss
