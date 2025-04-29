@@ -73,7 +73,7 @@ class Model(L.LightningModule):
         pred_bin = pred[:, 0]
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        mask = (y_bin == 0)
+        mask = (nn.functional.sigmoid(pred_bin) < 0.5)
 
         pred_multi = pred[:, 1:]
         if mask.sum() > 0:
@@ -105,28 +105,32 @@ class Model(L.LightningModule):
             }, on_step=False, on_epoch=True, prog_bar=True
         )
 
-        # -- MULTILABEL CLASSIFICATION --
+       # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
-        
-        cf1 = self.cf1(pred_multi[mask], y_multi[mask].float())
-        of1 = self.of1(pred_multi[mask], y_multi[mask].float())
-        mAP = self.mAP(pred_multi[mask], y_multi[mask].long())
-        acc_multi = self.acc_fn_multi(pred_multi[mask], y_multi[mask].float())
-        self.log_dict(
-            {
-                f'{split}/cf1_multi':cf1,
-                f'{split}/of1_multi':of1,
-                f'{split}/mAP_multi': mAP,
-                f'{split}/acc_multi': acc_multi
-            }, prog_bar=True, on_epoch=True, on_step=False
-        )
 
-        if split == 'Train':
-            self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=False, on_step=True)
-            self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=False, on_step=True)
+        if mask.sum() > 0:
+            cf1 = self.cf1(pred_multi[mask], y_multi[mask].float())
+            of1 = self.of1(pred_multi[mask], y_multi[mask].float())
+            mAP = self.mAP(pred_multi[mask], y_multi[mask].long())
+            acc_multi = self.acc_fn_multi(pred_multi[mask], y_multi[mask].float())
+
+            self.log_dict(
+                {
+                    f'{split}/cf1_multi': cf1,
+                    f'{split}/of1_multi': of1,
+                    f'{split}/mAP_multi': mAP,
+                    f'{split}/acc_multi': acc_multi
+                }, prog_bar=True, on_epoch=True, on_step=False
+            )
         else:
-            self.log(f'{split}/loss_multi', multi_loss, prog_bar=True, on_epoch=True, on_step=False)
-            self.log(f'{split}/con_loss', c_loss, prog_bar=True, on_epoch=True, on_step=False)
+            self.log_dict(
+                {
+                    f'{split}/cf1_multi': 0.0,
+                    f'{split}/of1_multi': 0.0,
+                    f'{split}/mAP_multi': 0.0,
+                    f'{split}/acc_multi': 0.0
+                }, prog_bar=True, on_epoch=True, on_step=False
+            )
 
         # -- GENERAL LOSS --
         self.log(f"{split}/loss", loss, prog_bar=True, on_epoch=True, on_step=True)
