@@ -23,8 +23,8 @@ class FusionLayer(nn.Module):
         self.cross_attn_t_it = CrossAttnEncoder(decoder_layer, num_decoders)
 
     def forward(self, z_i, z_t, z_it):        
-        z_i_it = self.decoder_img(z_it, z_i)
-        z_t_it = self.decoder_txt(z_it, z_t)
+        z_i_it = self.cross_attn_i_it(z_it, z_i)
+        z_t_it = self.cross_attn_t_it(z_it, z_t)
 
         # Concatenation of features, output dimension BSZ x 2M x 768
         z = torch.cat([z_i_it, z_t_it], 1)
