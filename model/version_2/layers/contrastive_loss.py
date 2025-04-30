@@ -51,9 +51,9 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         with torch.no_grad():
             _, _, _, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
 
-            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
-            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
-            z_m = self.blip_momentum(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i).last_hidden_state
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state[:, 0]
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0]
+            z_m = self.blip_momentum(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i).last_hidden_state[:, 0]
 
             if not self.initialized:
                 dim = z_i.size(-1)
