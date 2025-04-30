@@ -45,7 +45,7 @@ class CrossAttnEncoderLayer(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, embed_dim),
             nn.ReLU(),
         )
 
