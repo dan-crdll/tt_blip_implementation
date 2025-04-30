@@ -28,8 +28,8 @@ class FeatureExtractionLayer(nn.Module):
         """
         Initialize the training mode by setting the requires_grad attribute of the parameters
         """
-        for param in self.blip.parameters():
-            param.requires_grad_(False)
+        # for param in self.blip.parameters():
+        #     param.requires_grad_(False)
 
         for param in self.blip_img.parameters():
             param.requires_grad_(False)
@@ -51,6 +51,14 @@ class FeatureExtractionLayer(nn.Module):
         for layer in trainable_layers:
             for param in layer.parameters():
                 param.requires_grad_(True)
+
+        trainable_layers = self.blip.text_encoder.encoder.layer[-1]
+        for param in self.blip.parameters():
+            param.requires_grad = False
+        for layer in trainable_layers:
+            for param in layer.parameters():
+                if not any(torch.equal(param, p) for p in layer.attention.parameters()):
+                    param.requires_grad = True
         
                 
     def forward(

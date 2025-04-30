@@ -77,7 +77,7 @@ class Model(L.LightningModule):
 
         pred_multi = pred[:, 1:]
         if mask.sum() > 0:
-            multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask])
+            multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
             cls_loss = bin_loss + multi_loss
         else:
             cls_loss = bin_loss
@@ -106,7 +106,7 @@ class Model(L.LightningModule):
             }, on_step=False, on_epoch=True, prog_bar=True
         )
 
-       # -- MULTILABEL CLASSIFICATION --
+        # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
 
         if mask.sum() > 0:
