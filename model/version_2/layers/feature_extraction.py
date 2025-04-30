@@ -73,7 +73,7 @@ class FeatureExtractionLayer(nn.Module):
         # BERT Feature Extraction (BSZ x M x 768)
         z_t = self.bert(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
         # Q-FORMER Feature Aggregation (BSZ x M x 768)
-        z_it = self.qformer(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i)
+        z_it = self.qformer(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i).last_hidden_state
 
         return z_i, z_t, z_it
 
