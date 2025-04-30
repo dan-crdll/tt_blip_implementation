@@ -54,7 +54,7 @@ class CrossAttnEncoderLayer(nn.Module):
 
     def forward(self, q, k, v):
         z, _ = self.multi_head_attn(q, k, v)
-        x = self.norm_1(k + z)
+        x = self.norm_1(q + z)
         z = self.mlp(x)
         x = self.norm_2(x + z)
         return x
