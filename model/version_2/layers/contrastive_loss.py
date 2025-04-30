@@ -53,7 +53,7 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
             z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state[:, 0]
             z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0]
-            z_m = self.blip_momentum(query_embeds=z_t.unsqueeze(1), encoder_hidden_states=z_i.unsqueeze(1)).squeeze()
+            z_m = self.blip_momentum(query_embeds=z_t.unsqueeze(1), encoder_hidden_states=z_i.unsqueeze(1)).last_hidden_state.squeeze()
 
             if not self.initialized:
                 dim = z_i.size(-1)
