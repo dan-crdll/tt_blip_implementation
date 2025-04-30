@@ -49,11 +49,11 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
         with torch.no_grad():
-            blip_pixel_values, blip_input_ids, blip_attn_mask, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
+            _, _, _, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
 
-            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state[:, 0, :]
-            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0, :]
-            z_m = self.blip_momentum(pixel_values=blip_pixel_values, input_ids=blip_input_ids.long(), attention_mask=blip_attn_mask).last_hidden_state[:, 0, :]
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
+            z_m = self.blip_momentum(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i).last_hidden_state
 
             if not self.initialized:
                 dim = z_i.size(-1)
@@ -73,12 +73,6 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         l_m2i = self.loss(blip_enc, z_i_all)
         l_m2t = self.loss(blip_enc, z_t_all)
 
-        # l_i2t = self.loss(img_cls, z_t_all)
-        # l_t2i = self.loss(txt_cls, z_i_all)
-        # l_i2i = self.loss(img_cls, z_i_all)
-        # l_t2t = self.loss(txt_cls, z_t_all)
-
-        # loss = (l_i2m + l_t2m + l_i2t + l_t2i + l_i2i + l_t2t) / 6
         loss = (l_i2m + l_t2m + l_m2i + l_m2t) / 4
 
         with torch.no_grad():

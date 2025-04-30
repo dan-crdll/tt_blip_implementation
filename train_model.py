@@ -1,5 +1,5 @@
 from model.utils.batch_extractor_dgm import DatasetLoader
-from model.architecture import Model
+from model.version_2.architecture import Model
 from lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import torch
@@ -32,10 +32,7 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
     train_dl, val_dl = ds_loader.get_dataloaders()
 
     model = Model(
-            ds_loader.dp.empty_pixel_values, 
-            ds_loader.dp.empty_input_ids,
-            ds_loader.dp.empty_attn_mask, 
-            768, 
+            1, 
             num_heads,
             hidden_dim=hidden_dim,
             trainable=-trainable

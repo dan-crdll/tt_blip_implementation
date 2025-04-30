@@ -3,26 +3,47 @@ from torch import nn
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-from model.layers.classification import ClassificationLayer
-from model.layers.feature_extraction import FeatureExtractionLayer
-from model.layers.fusion import FusionLayer
 from model.utils.loss_fn import ManipulationAwareContrastiveLoss
+from model.version_2.layers.feature_extraction import FeatureExtractionLayer
+from model.version_2.layers.fusion_layer import FusionLayer
+from model.version_2.layers.classification_layer import ClassificationLayer
+from model.version_2.layers.contrastive_loss import ManipulationAwareContrastiveLoss
+from transformers import ViTModel, BertModel, Blip2QFormerConfig, Blip2QFormerModel
 import copy
 
 """
-Complete architecture
-"""
-class Model(L.LightningModule):
-    def __init__(self, empty_img, empty_txt, empty_attn_mask, embed_dim, num_heads, hidden_dim, trainable=-3, gamma=2):
-        super().__init__()
-        # Model Layers
-        self.feature_extraction_layer = FeatureExtractionLayer(empty_img, empty_txt, empty_attn_mask, trainable)
-        
-        momentum_encoder = (copy.deepcopy(self.feature_extraction_layer.vit), copy.deepcopy(self.feature_extraction_layer.bert), copy.deepcopy(self.feature_extraction_layer.blip))
-        self.c_loss = ManipulationAwareContrastiveLoss(0.8, momentum_encoder)
+Architecture to perform multi-modal deepfake detection.
 
-        self.fusion_layer = FusionLayer(embed_dim, num_heads, hidden_dim, 1, 1)
-        self.classification_layer = ClassificationLayer(embed_dim, hidden_dim)
+Feature Extraction Layer:
+
+Fusion Layer:
+
+Classification Layer:
+"""
+
+class Model(L.LightningModule):
+    def __init__(self, num_decoders, num_heads, hidden_dim, trainable=-3):
+        super().__init__()
+
+        # Feature Extraction Layer
+        vit_model = ViTModel.from_pretrained('google/vit-base-patch16-224')
+        bert_model = BertModel.from_pretrained('google-bert/bert-base-uncased')
+        qformer_config = Blip2QFormerConfig.from_pretrained('Salesforce/blip2-opt-2.7b')
+        qformer_config.encoder_hidden_size = 768
+        qformer_model = Blip2QFormerModel(qformer_config)
+
+        self.feature_extraction_layer = FeatureExtractionLayer(vit_model, bert_model, qformer_model, trainable)
+        
+        # Fusion Layer
+        self.fusion_layer = FusionLayer(768, num_heads, hidden_dim, num_decoders)
+
+        # Classification Layer
+        self.classification_layer = ClassificationLayer(768)
+
+        # Contrastive Loss
+        self.contrastive_loss = ManipulationAwareContrastiveLoss(0.9, (
+            copy.deepcopy(vit_model), copy.deepcopy(bert_model), copy.deepcopy(qformer_model)
+            ))
 
         # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
@@ -52,36 +73,30 @@ class Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, x):
-        z_i, z_t, z_m = self.feature_extraction_layer(*x)
-        c_loss = self.c_loss(z_i[:, 0], 
-                            z_t[:, 0], 
-                            z_m[:, 0], 
-                            (self.feature_extraction_layer.vit.parameters(), self.feature_extraction_layer.bert.parameters(), self.feature_extraction_layer.blip.parameters()),
-                            x)
-        z = self.fusion_layer((z_i, z_t, z_m))
-        y = self.classification_layer(z)
-        return y, c_loss
+        z_i, z_t, z_it = self.feature_extraction_layer(*x)
+        z, (z_i_it, z_t_it) = self.fusion_layer(z_i, z_t, z_it)
+        y_bin, y_multi = self.classification_layer(z)
+
+        c_loss = self.contrastive_loss(z_i, z_t, z_it, (
+            self.feature_extraction_layer.vit.parameters(), 
+            self.feature_extraction_layer.bert.parameters(),
+            self.feature_extraction_layer.qformer.parameters()
+        ), x)
+        return y_bin, y_multi, c_loss
     
     def step(self, split, batch):
         x, (y_bin, y_multi) = batch 
-        # (pred_bin, pred_multi), c_loss = self.forward(x)
-        
-        # multi_loss = self.loss_fn(pred_multi, y_multi.float())
-        # bin_loss = self.loss_fn(pred_bin, y_bin.float())
 
-        pred, c_loss = self.forward(x)
-        pred_bin = pred[:, 0]
+        pred_bin, pred_multi, c_loss = self.forward(x)
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
         mask = (nn.functional.sigmoid(pred_bin) < 0.5)
 
-        pred_multi = pred[:, 1:]
         if mask.sum() > 0:
             multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
             cls_loss = bin_loss + multi_loss
         else:
             cls_loss = bin_loss
-        # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
         loss = c_loss + cls_loss
 
