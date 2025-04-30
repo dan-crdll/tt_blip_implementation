@@ -17,7 +17,7 @@ class ContrastiveLoss(nn.Module):
 
 
 class ManipulationAwareContrastiveLoss(nn.Module):
-    def __init__(self, temp, momentum_encoder, m=0.9, K=16):
+    def __init__(self, temp, momentum_encoder, m=0.9, K=64):
         super().__init__()
         self.loss = ContrastiveLoss(temp)
         self.vit_momentum, self.bert_momentum, self.blip_momentum = momentum_encoder
