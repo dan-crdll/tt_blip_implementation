@@ -11,8 +11,8 @@ class ContrastiveLoss(nn.Module):
     def forward(self, query, key):
         query = F.normalize(query, dim=-1)
         key = F.normalize(key, dim=-1)
-        logits = torch.matmul(query, key.T) / self.temp  # shape: [B, B + K]
-        targets = torch.arange(query.size(0), device=query.device)  # shape: [B]
+        logits = torch.matmul(query, key.T) / self.temp
+        targets = torch.arange(query.size(0), device=query.device)
         return F.cross_entropy(logits, targets)
 
 
@@ -29,6 +29,7 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_ptr = 0
         self.initialized = False
 
+        # Freeze momentum encoder parameters
         for enc in (self.vit_momentum, self.bert_momentum, self.blip_momentum):
             for param in enc.parameters():
                 param.requires_grad = False
@@ -48,26 +49,28 @@ class ManipulationAwareContrastiveLoss(nn.Module):
 
     def forward(self, img_cls, txt_cls, blip_enc, parameters, batch):
         with torch.no_grad():
-            _, _, _, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
+            blip_pixel_values, blip_input_ids, blip_attn_mask, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
 
-            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state[:, 0]
-            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0]
-            z_m = self.blip_momentum(query_embeds=z_t.unsqueeze(1), encoder_hidden_states=z_i.unsqueeze(1)).last_hidden_state.squeeze()
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
+            z_m = self.blip_momentum(query_embeds=z_t, attention_mask=bert_attn_mask, encoder_hidden_states=z_i).last_hidden_state[:, 0, :]
+            
+            z_t = z_t[:, 0, :]
+            z_i = z_i[:, 0, :]
 
             if not self.initialized:
                 dim = z_i.size(-1)
                 self._init_queues(dim, z_i.device)
 
+            # Append to queue (and use old entries as negatives)
             prev_i = self.queue_i.clone().detach()
             prev_t = self.queue_t.clone().detach()
             prev_m = self.queue_m.clone().detach()
 
-        # Concatenazione con le code (negativi)
-        z_i_all = torch.cat([z_i, prev_i], dim=0)  # [B + K, D]
+        z_i_all = torch.cat([z_i, prev_i], dim=0)
         z_t_all = torch.cat([z_t, prev_t], dim=0)
         z_m_all = torch.cat([z_m, prev_m], dim=0)
 
-        # Positivi sono nei primi B elementi, quindi targets = [0, ..., B-1]
         l_i2m = self.loss(img_cls, z_m_all)
         l_t2m = self.loss(txt_cls, z_m_all)
         l_m2i = self.loss(blip_enc, z_i_all)
