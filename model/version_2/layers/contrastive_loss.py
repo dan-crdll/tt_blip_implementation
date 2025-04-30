@@ -11,8 +11,8 @@ class ContrastiveLoss(nn.Module):
     def forward(self, query, key):
         query = F.normalize(query, dim=-1)
         key = F.normalize(key, dim=-1)
-        logits = torch.matmul(query, key.T) / self.temp
-        targets = torch.arange(query.size(0), device=query.device)
+        logits = torch.matmul(query, key.T) / self.temp  # shape: [B, B + K]
+        targets = torch.arange(query.size(0), device=query.device)  # shape: [B]
         return F.cross_entropy(logits, targets)
 
 
@@ -29,7 +29,6 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         self.queue_ptr = 0
         self.initialized = False
 
-        # Freeze momentum encoder parameters
         for enc in (self.vit_momentum, self.bert_momentum, self.blip_momentum):
             for param in enc.parameters():
                 param.requires_grad = False
@@ -59,15 +58,16 @@ class ManipulationAwareContrastiveLoss(nn.Module):
                 dim = z_i.size(-1)
                 self._init_queues(dim, z_i.device)
 
-            # Append to queue (and use old entries as negatives)
             prev_i = self.queue_i.clone().detach()
             prev_t = self.queue_t.clone().detach()
             prev_m = self.queue_m.clone().detach()
 
-        z_i_all = torch.cat([z_i, prev_i], dim=0)
+        # Concatenazione con le code (negativi)
+        z_i_all = torch.cat([z_i, prev_i], dim=0)  # [B + K, D]
         z_t_all = torch.cat([z_t, prev_t], dim=0)
         z_m_all = torch.cat([z_m, prev_m], dim=0)
 
+        # Positivi sono nei primi B elementi, quindi targets = [0, ..., B-1]
         l_i2m = self.loss(img_cls, z_m_all)
         l_t2m = self.loss(txt_cls, z_m_all)
         l_m2i = self.loss(blip_enc, z_i_all)
