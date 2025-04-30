@@ -52,13 +52,14 @@ class FeatureExtractionLayer(nn.Module):
             for param in layer.parameters():
                 param.requires_grad_(True)
 
-        trainable_layers = self.blip.text_encoder.encoder.layer[-1]
+        layer = self.blip.text_encoder.encoder.layer[trainable:]
         for param in self.blip.parameters():
             param.requires_grad = False
         for layer in trainable_layers:
             for param in layer.parameters():
                 if not any(torch.equal(param, p) for p in layer.attention.parameters()):
                     param.requires_grad = True
+
         
                 
     def forward(
