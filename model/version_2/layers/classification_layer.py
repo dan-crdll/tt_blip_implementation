@@ -23,15 +23,12 @@ class ClassificationLayer(nn.Module):
         self.clsf = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(0.1),
 
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.ReLU(),
-            nn.Dropout(0.1),
 
             nn.Linear(hidden_dim * 2, hidden_dim * 2),
             nn.ReLU(),
-            nn.Dropout(0.1),
 
             nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
