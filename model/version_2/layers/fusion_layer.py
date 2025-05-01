@@ -26,7 +26,7 @@ class FusionLayer(nn.Module):
         z = torch.cat([z_i, z_t, z_it], 1)
 
         z = self.self_attn(z, z)
-        z = nn.functional.adaptive_avg_pool1d(z.permute(0,2,1)).squeeze()
+        z = nn.functional.adaptive_avg_pool1d(z.permute(0,2,1), 1).squeeze()
 
         return z
     
