@@ -3,7 +3,7 @@ from torch import nn
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-from model.utils.loss_fn import ManipulationAwareContrastiveLoss
+from model.utils.loss_fn import ManipulationAwareContrastiveLoss, ITMContrastive
 from model.version_2.layers.feature_extraction import FeatureExtractionLayer
 from model.version_2.layers.fusion_layer import FusionLayer
 from model.version_2.layers.classification_layer import ClassificationLayer
@@ -41,9 +41,10 @@ class Model(L.LightningModule):
         self.classification_layer = ClassificationLayer(768)
 
         # Contrastive Loss
-        self.contrastive_loss = ManipulationAwareContrastiveLoss(0.9, (
-            copy.deepcopy(vit_model), copy.deepcopy(bert_model), copy.deepcopy(qformer_model)
-            ))
+        self.contrastive_loss = ITMContrastive(temp=0.99, momentum=(
+            copy.deepcopy(self.feature_extraction_layer.vit),
+            copy.deepcopy(self.feature_extraction_layer.bert)
+        ))
 
         # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
@@ -77,11 +78,11 @@ class Model(L.LightningModule):
         z = self.fusion_layer(z_i, z_t, z_it)
         y_bin, y_multi = self.classification_layer(z)
 
-        c_loss = self.contrastive_loss(z_i[:, 0], z_t[:, 0], z_it[:, 0], (
+        c_loss = self.contrastive_loss(z_i[:, 0], z_t[:, 0], (
              self.feature_extraction_layer.vit.parameters(), 
-             self.feature_extraction_layer.bert.parameters(),
-             self.feature_extraction_layer.qformer.parameters()
+             self.feature_extraction_layer.bert.parameters()
         ), x)
+        
         return y_bin, y_multi, c_loss
     
     def step(self, split, batch):

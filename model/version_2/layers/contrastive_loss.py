@@ -96,3 +96,72 @@ class ManipulationAwareContrastiveLoss(nn.Module):
                 param.data = param.data * self.m + parameters_blip[i].data * (1 - self.m)
 
         return loss
+    
+class ITMContrastive(nn.Module):
+    def __init__(self, temp, momentum_encoder, m=0.9, K=64):
+        super().__init__()
+        self.loss = ContrastiveLoss(temp)
+        self.vit_momentum, self.bert_momentum = momentum_encoder
+        self.m = m
+        self.K = K
+        self.register_buffer("queue_i", None)
+        self.register_buffer("queue_t", None)
+        self.queue_ptr = 0
+        self.initialized = False
+
+        # Freeze momentum encoder parameters
+        for enc in (self.vit_momentum, self.bert_momentum):
+            for param in enc.parameters():
+                param.requires_grad = False
+
+    def _init_queues(self, dim, device):
+        self.queue_i = torch.zeros(self.K, dim, device=device)
+        self.queue_t = torch.zeros(self.K, dim, device=device)
+        self.initialized = True
+
+    def _enqueue_dequeue(self, queue, new, ptr):
+        B = new.size(0)
+        K = self.K
+        insert_pos = (ptr + torch.arange(B, device=new.device)) % K
+        queue[insert_pos] = new
+        return queue
+
+    def forward(self, img_cls, txt_cls, parameters, batch):
+        with torch.no_grad():
+            blip_pixel_values, blip_input_ids, blip_attn_mask, vit_pixel_values, bert_input_ids, bert_attn_mask = batch
+
+            z_i = self.vit_momentum(pixel_values=vit_pixel_values).last_hidden_state
+            z_t = self.bert_momentum(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
+            
+            z_t = z_t[:, 0, :]
+            z_i = z_i[:, 0, :]
+
+            if not self.initialized:
+                dim = z_i.size(-1)
+                self._init_queues(dim, z_i.device)
+
+            # Append to queue (and use old entries as negatives)
+            prev_i = self.queue_i.clone().detach()
+            prev_t = self.queue_t.clone().detach()
+
+        z_i_all = torch.cat([z_i, prev_i], dim=0)
+        z_t_all = torch.cat([z_t, prev_t], dim=0)
+
+        l_v2t = self.loss(img_cls, z_t_all)
+        l_t2v = self.loss(txt_cls, z_i_all)
+        loss = (l_t2v + l_v2t) / 2
+
+        with torch.no_grad():
+            B = z_i.size(0)
+            self.queue_i = self._enqueue_dequeue(self.queue_i, z_i.detach(), self.queue_ptr)
+            self.queue_t = self._enqueue_dequeue(self.queue_t, z_t.detach(), self.queue_ptr)
+            self.queue_ptr = (self.queue_ptr + B) % self.K
+
+            parameters_vit, parameters_bert = map(list, parameters)
+            for i, param in enumerate(self.vit_momentum.parameters()):
+                param.data = param.data * self.m + parameters_vit[i].data * (1 - self.m)
+            for i, param in enumerate(self.bert_momentum.parameters()):
+                param.data = param.data * self.m + parameters_bert[i].data * (1 - self.m)
+
+        return loss
+    

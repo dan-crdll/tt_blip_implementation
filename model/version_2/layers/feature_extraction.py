@@ -80,10 +80,10 @@ class FeatureExtractionLayer(nn.Module):
                 bert_input_ids, 
                 bert_attn_mask
             ):
-        # ViT Feature Extraction (BSZ x 1 x 768)
-        z_i = self.vit(pixel_values=vit_pixel_values).last_hidden_state[:, 0].unsqueeze(1)
-        # BERT Feature Extraction (BSZ x 1 x 768)
-        z_t = self.bert(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state[:, 0].unsqueeze(1)
+        # ViT Feature Extraction (BSZ x N x 768)
+        z_i = self.vit(pixel_values=vit_pixel_values).last_hidden_state
+        # BERT Feature Extraction (BSZ x M x 768)
+        z_t = self.bert(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
 
         with torch.no_grad():
             z_t_m = self.momentum_bert(input_ids=bert_input_ids.long(), attention_mask=bert_attn_mask).last_hidden_state
