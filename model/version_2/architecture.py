@@ -3,11 +3,10 @@ from torch import nn
 import lightning as L
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-from model.utils.loss_fn import ManipulationAwareContrastiveLoss, ITMContrastive
 from model.version_2.layers.feature_extraction import FeatureExtractionLayer
 from model.version_2.layers.fusion_layer import FusionLayer
 from model.version_2.layers.classification_layer import ClassificationLayer
-from model.version_2.layers.contrastive_loss import ManipulationAwareContrastiveLoss
+from model.version_2.layers.contrastive_loss import ManipulationAwareContrastiveLoss, ITMContrastive
 from transformers import ViTModel, BertModel, Blip2QFormerConfig, Blip2QFormerModel
 import copy
 
@@ -82,7 +81,7 @@ class Model(L.LightningModule):
              self.feature_extraction_layer.vit.parameters(), 
              self.feature_extraction_layer.bert.parameters()
         ), x)
-        
+
         return y_bin, y_multi, c_loss
     
     def step(self, split, batch):
