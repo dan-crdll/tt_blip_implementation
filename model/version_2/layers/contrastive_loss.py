@@ -76,7 +76,9 @@ class ManipulationAwareContrastiveLoss(nn.Module):
         l_m2i = self.loss(blip_enc, z_i_all)
         l_m2t = self.loss(blip_enc, z_t_all)
 
-        loss = (l_i2m + l_t2m + l_m2i + l_m2t) / 4
+        l_m2m = self.loss(blip_enc, z_m_all)
+
+        loss = (l_i2m + l_t2m + l_m2i + l_m2t + l_m2m) / 5
 
         with torch.no_grad():
             B = z_i.size(0)
