@@ -23,7 +23,7 @@ class FusionLayer(nn.Module):
         self.self_attn = CrossAttnEncoder(decoder_layer, num_decoders)
 
     def forward(self, z_i, z_t, z_it):        
-        z = torch.cat([z_i, z_t, z_it])
+        z = torch.cat([z_i, z_t, z_it], 1)
 
         z = self.self_attn(z, z)
         z = nn.functional.adaptive_avg_pool1d(z.permute(0,2,1)).squeeze()
