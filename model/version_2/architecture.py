@@ -40,7 +40,7 @@ class Model(L.LightningModule):
         self.classification_layer = ClassificationLayer(768)
 
         # Contrastive Loss
-        self.contrastive_loss = ITMContrastive(temp=0.99, momentum=(
+        self.contrastive_loss = ITMContrastive(0.99, (
             copy.deepcopy(self.feature_extraction_layer.vit),
             copy.deepcopy(self.feature_extraction_layer.bert)
         ))
