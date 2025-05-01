@@ -74,15 +74,15 @@ class Model(L.LightningModule):
     
     def forward(self, x):
         z_i, z_t, z_it = self.feature_extraction_layer(*x)
-        z, (z_i_it, z_t_it) = self.fusion_layer(z_i, z_t, z_it)
+        z = self.fusion_layer(z_i, z_t, z_it)
         y_bin, y_multi = self.classification_layer(z)
 
-        c_loss = self.contrastive_loss(z_i[:, 0], z_t[:, 0], z_it[:, 0], (
-            self.feature_extraction_layer.vit.parameters(), 
-            self.feature_extraction_layer.bert.parameters(),
-            self.feature_extraction_layer.qformer.parameters()
-        ), x)
-        return y_bin, y_multi, c_loss
+        # c_loss = self.contrastive_loss(z_i[:, 0], z_t[:, 0], z_it[:, 0], (
+        #     self.feature_extraction_layer.vit.parameters(), 
+        #     self.feature_extraction_layer.bert.parameters(),
+        #     self.feature_extraction_layer.qformer.parameters()
+        # ), x)
+        return y_bin, y_multi, 0.0
     
     def step(self, split, batch):
         x, (y_bin, y_multi) = batch 

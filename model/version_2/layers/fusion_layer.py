@@ -19,19 +19,16 @@ class FusionLayer(nn.Module):
     def __init__(self, embed_dim, num_heads, hidden_dim, num_decoders=1):
         super().__init__()
         decoder_layer = CrossAttnEncoderLayer(embed_dim, num_heads, hidden_dim, batch_first=True)
-        self.cross_attn_i_it = CrossAttnEncoder(decoder_layer, num_decoders)
-        self.cross_attn_t_it = CrossAttnEncoder(decoder_layer, num_decoders)
+        
+        self.self_attn = CrossAttnEncoder(decoder_layer, num_decoders)
 
     def forward(self, z_i, z_t, z_it):        
-        z_i_it = self.cross_attn_i_it(z_it, z_i)
-        z_t_it = self.cross_attn_t_it(z_it, z_t)
+        z = torch.cat([z_i, z_t, z_it])
 
-        # Concatenation of features, output dimension BSZ x 2M x 768
-        z = torch.cat([z_i_it, z_t_it], 1)
+        z = self.self_attn(z, z)
+        z = nn.functional.adaptive_avg_pool1d(z.permute(0,2,1)).squeeze()
 
-        z = z.permute(0, 2, 1)
-        z = nn.functional.adaptive_avg_pool1d(z, 1).squeeze()
-        return z, (z_i_it, z_t_it)
+        return z
     
 
 """
