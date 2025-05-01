@@ -24,9 +24,10 @@ class FusionLayer(nn.Module):
 
     def forward(self, z_i, z_t, z_it):        
         z_it_cls = self.cross_attn(z_i, z_t)
-        z = torch.cat([z_it_cls, z_it], 1)
+        #z = torch.cat([z_it_cls, z_it], 1)
 
-        z = self.self_attn(z, z)
+        #z = self.self_attn(z, z)
+        z = z_it_cls
         z = nn.functional.adaptive_avg_pool1d(z.permute(0,2,1), 1).squeeze()
 
         return z

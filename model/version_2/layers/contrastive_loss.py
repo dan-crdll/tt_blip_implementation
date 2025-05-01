@@ -8,9 +8,18 @@ class ContrastiveLoss(nn.Module):
         super().__init__()
         self.temp = temp
 
+        self.projector_q = nn.Linear(768, 256)
+        self.projector_k = nn.Linear(768, 256)
+
     def forward(self, query, key):
+        # Project the query and key
+        query = self.projector_q(query)
+        key = self.projector_k(key)
+
+        # Normalize the query and key
         query = F.normalize(query, dim=-1)
         key = F.normalize(key, dim=-1)
+
         logits = torch.matmul(query, key.T) / self.temp
         targets = torch.arange(query.size(0), device=query.device)
         return F.cross_entropy(logits, targets)
@@ -108,6 +117,8 @@ class ITMContrastive(nn.Module):
         self.register_buffer("queue_t", None)
         self.queue_ptr = 0
         self.initialized = False
+        
+        
 
         # Freeze momentum encoder parameters
         for enc in (self.vit_momentum, self.bert_momentum):
