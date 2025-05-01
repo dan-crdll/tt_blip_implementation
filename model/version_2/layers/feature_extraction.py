@@ -92,10 +92,12 @@ class FeatureExtractionLayer(nn.Module):
         z_it = self.qformer(query_embeds=z_t_m, attention_mask=bert_attn_mask, encoder_hidden_states=z_i_m).last_hidden_state
 
         # Aggiornamento parametri Momentum Encoder
+        bert_params = list(self.bert.parameters())
+        vit_params = list(self.vit.parameters())
         for i, param in enumerate(self.momentum_bert.parameters()):
-            param.data = param.data * 0.999 + self.bert.parameters()[i].data * 0.001
+            param.data = param.data * 0.999 + bert_params[i].data * 0.001
         for i, param in enumerate(self.momentum_vit.parameters()):
-            param.data = param.data * 0.999 + self.vit.parameters()[i].data * 0.001
+            param.data = param.data * 0.999 + vit_params[i].data * 0.001
 
         return z_i, z_t, z_it
 
