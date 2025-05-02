@@ -48,11 +48,11 @@ class Blip2Model(nn.Module):
         # Preprocess
         processed = self.processor(image, text, return_tensors='pt', padding=True)
         processed_image = self.vit_processor(image, return_tensors='pt')
-        x_img = processed_image['pixel_values'].to(self.device, non_blocking=True)
-        x_txt = processed['input_ids'].to(self.device, non_blocking=True)
-        x_attn_mask = processed['attention_mask'].to(self.device, non_blocking=True)
+        x_img = processed_image['pixel_values']
+        x_txt = processed['input_ids']
+        x_attn_mask = processed['attention_mask']
 
-        z_img = self.vit(x_img)['last_hidden_state']
+        z_img = self.vit(x_img.to('cuda'))['last_hidden_state']
 
         # Image attention mask
         encoder_attn_mask = torch.ones((z_img.shape[0], z_img.shape[1]), device=z_img.device) \
@@ -63,14 +63,14 @@ class Blip2Model(nn.Module):
             z_txt = torch.zeros((z_img.shape[0], z_img.shape[1], 768), device=z_img.device)
             x_attn_mask = torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
         else:
-            z_txt = self.embedding(x_txt)
+            z_txt = self.embedding(x_txt.to('cuda'))
 
         # QFormer
         z = self.model(
             encoder_hidden_states=z_img,
             query_embeds=z_txt,
-            attention_mask=x_attn_mask,
-            encoder_attention_mask=encoder_attn_mask
+            attention_mask=x_attn_mask.to('cuda'),
+            encoder_attention_mask=encoder_attn_mask.to('cuda')
         )
 
         return z.last_hidden_state

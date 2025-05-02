@@ -10,7 +10,7 @@ class Model(L.LightningModule):
     def __init__(self, embed_dim, num_heads, hidden_dim):
         super().__init__()
 
-        self.feature_extraction = FeatureExtraction(self.device)
+        self.feature_extraction = FeatureExtraction('cuda')
 
         self.fusion_layer = nn.ModuleList([
             CrossAttnBlock(embed_dim, num_heads, hidden_dim) 

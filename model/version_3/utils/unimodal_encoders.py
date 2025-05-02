@@ -43,7 +43,11 @@ class BERT(nn.Module):
         inputs = self.tokenizer(text, return_tensors='pt', padding=True, truncation=True)
         input_ids = inputs['input_ids'].to(self.device, non_blocking=True)
         attention_mask = inputs['attention_mask'].to(self.device, non_blocking=True)
+        seq_len = input_ids.shape[1]
+        extended_attention_mask = attention_mask[:, None, None, :] # [batch, 1, 1, seq]
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0  # same as original BERT logic
+
         z = self.bert.embeddings(input_ids)
         for layer in self.bert.encoder.layer[:self.n_layers]:
-            z = layer(z, attention_mask.float())[0]
+            z = layer(z, extended_attention_mask)[0]
         return z
