@@ -2,6 +2,7 @@ from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from torch import nn 
 import torch.nn.functional as F
+import torch
 import lightning as L
 
 

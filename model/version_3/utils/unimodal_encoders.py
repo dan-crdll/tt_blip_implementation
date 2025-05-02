@@ -7,7 +7,6 @@ class ViT(nn.Module):
         self.device = device
         self.vit = ViTModel.from_pretrained(hf_repo)
         self.processor = ViTImageProcessor.from_pretrained(hf_repo)
-        self.vit.to(device)
 
         # Freeze all layers, then unfreeze from specified encoder block
         for param in self.vit.parameters():
@@ -30,7 +29,6 @@ class BERT(nn.Module):
         self.device = device
         self.bert = BertModel.from_pretrained(hf_repo)
         self.tokenizer = BertTokenizer.from_pretrained(hf_repo)
-        self.bert.to(device)
         self.n_layers = n_layers
 
         for param in self.bert.parameters():

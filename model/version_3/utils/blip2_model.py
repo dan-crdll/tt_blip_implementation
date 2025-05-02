@@ -15,7 +15,6 @@ class Blip2Model(nn.Module):
         # Load processor and model to the correct device
         self.processor = Blip2Processor.from_pretrained(hf_repo)
         self.model = Blip2ForImageTextRetrieval.from_pretrained(hf_repo)
-        self.model.to(self.device)
 
         # Image token setup
         self.processor.num_query_tokens = self.model.config.num_query_tokens
