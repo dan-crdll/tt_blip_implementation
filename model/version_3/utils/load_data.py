@@ -1,8 +1,10 @@
+import torch 
+from nltk.corpus import stopwords
+import nltk
 import sys
 sys.path.append('.')
 from torch.utils.data import DataLoader
 from model.utils.data_preprocessor import DataPreprocessor
-import torch
 from PIL import Image
 from datasets import load_dataset
 
@@ -68,11 +70,10 @@ class DatasetLoader:
                     multi[poss[m]] = 1.0
             multi_labels.append(torch.tensor(multi).unsqueeze(0))
 
-        x = self.dp(images, texts)
         labels = torch.tensor(labels)
         multi_labels = torch.vstack(multi_labels)
         y = (labels.to(torch.float), multi_labels)
-        return x, y
+        return images, texts, y
 
     def get_dataloaders(self):
         train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
