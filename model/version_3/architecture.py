@@ -19,8 +19,21 @@ class Model(L.LightningModule):
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
-            nn.Linear(5)
+            nn.Linear(embed_dim, 5)
         )
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
+
+        def lr_lambda(current_step):
+            warmup_steps = int(0.05 * self.trainer.max_steps)
+            if current_step < warmup_steps:
+                return current_step / warmup_steps
+            return 0.5 * (1 + torch.cos(torch.tensor(current_step - warmup_steps)/(self.trainer.max_steps - warmup_steps) * 3.1416))
+
+        scheduler = {"scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+                "interval":"step"}
+        return [optimizer], [scheduler]
     
     def forward(self, img, txt):
         (z_i, z), contrastive_loss = self.feature_extraction(img, txt)
