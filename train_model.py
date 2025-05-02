@@ -1,6 +1,5 @@
-from model.utils.batch_extractor_dgm import DatasetLoader
-from model.version_2.architecture import Model
-from lightning import Trainer
+from model.version_3.architecture import Model
+from model.version_3.utils.load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
@@ -8,6 +7,7 @@ import yaml
 import random
 import os
 import numpy as np
+import lightning as L
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
@@ -28,29 +28,14 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
         download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
-    ds_loader = DatasetLoader(batch_size=batch_size, allowed_splits=origins+manipulations)
-    train_dl, val_dl = ds_loader.get_dataloaders()
-
-    model = Model(
-            1, 
-            num_heads,
-            hidden_dim=hidden_dim,
-            trainable=-trainable
-        )
-
+    model = Model(768, num_heads, hidden_dim)
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
 
     torch.set_float32_matmul_precision('high')
-    trainer = Trainer(
-        max_epochs=epochs, 
-        logger=logger, 
-        log_every_n_steps=1, 
-        precision='bf16-mixed', 
-        accumulate_grad_batches=grad_acc, 
-        gradient_clip_val=1.0,
-        devices=gpus,
-        strategy='ddp_find_unused_parameters_true'
-    )
+    
+    train_dl, val_dl = DatasetLoader(origins+manipulations, batch_size).get_dataloaders()
+
+    trainer = L.Trainer(max_epochs=15)
     trainer.fit(model, train_dl, val_dl)
 
     torch.save(model.state_dict(), "./model_state_dict.pth")

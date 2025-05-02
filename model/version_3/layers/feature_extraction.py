@@ -7,6 +7,7 @@ from torch import nn
 
 class ImageFeatureExtraction(nn.Module):
     def __init__(self, device='cpu'):
+        super().__init__()
         self.vit = ViT("google/vit-base-patch16-224", device, unfreeze_from_layer=9)
         self.blip = Blip2Model("Salesforce/blip2-itm-vit-g", device)
 
@@ -23,6 +24,7 @@ class ImageFeatureExtraction(nn.Module):
 
 class TextFeatureExtraction(nn.Module):
     def __init__(self, device='cpu'):
+        super().__init__()
         self.bert = BERT("google-bert/bert-base-uncased", device=device, unfreeze_from_layer=9)
         self.blip = Blip2Model("Salesforce/blip2-itm-vit-g", device)
 
