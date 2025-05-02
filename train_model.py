@@ -35,7 +35,16 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
     
     train_dl, val_dl = DatasetLoader(origins+manipulations, batch_size).get_dataloaders()
 
-    trainer = L.Trainer(max_epochs=15, logger=logger)
+    trainer = L.Trainer(
+        max_epochs=epochs, 
+        logger=logger, 
+        log_every_n_steps=1, 
+        precision='bf16-mixed', 
+        accumulate_grad_batches=grad_acc, 
+        gradient_clip_val=1.0,
+        devices=gpus,
+        strategy='ddp_find_unused_parameters_true'
+    )
     trainer.fit(model, train_dl, val_dl)
 
     torch.save(model.state_dict(), "./model_state_dict.pth")
