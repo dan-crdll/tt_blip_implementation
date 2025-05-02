@@ -1,5 +1,5 @@
 from model.version_3.utils.blip2_model import Blip2Model
-from model.version_3.utils.unimodal_encoder import ViT, BERT
+from model.version_3.utils.unimodal_encoders import ViT, BERT
 from model.version_3.utils.loss_fn import InfoNCE
 import torch 
 from torch import nn 

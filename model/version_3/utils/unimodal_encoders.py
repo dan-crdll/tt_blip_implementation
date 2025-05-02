@@ -1,4 +1,4 @@
-from transformers import ViTModel, BertModel, ViTImageProcessorFast, BertTokenizerFast
+from transformers import ViTModel, BertModel, ViTImageProcessor, BertTokenizer
 from torch import nn
 
 class ViT(nn.Module):
@@ -6,7 +6,7 @@ class ViT(nn.Module):
         super().__init__()
         self.device = device
         self.vit = ViTModel.from_pretrained(hf_repo)
-        self.processor = ViTImageProcessorFast.from_pretrained(hf_repo)
+        self.processor = ViTImageProcessor.from_pretrained(hf_repo)
         self.vit.to(device)
 
         # Freeze all layers, then unfreeze from specified encoder block
@@ -29,7 +29,7 @@ class BERT(nn.Module):
         super().__init__()
         self.device = device
         self.bert = BertModel.from_pretrained(hf_repo)
-        self.tokenizer = BertTokenizerFast.from_pretrained(hf_repo)
+        self.tokenizer = BertTokenizer.from_pretrained(hf_repo)
         self.bert.to(device)
         self.n_layers = n_layers
 
