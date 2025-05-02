@@ -1,6 +1,8 @@
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from torch import nn 
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
 import torch.nn.functional as F
 import torch
 import lightning as L
@@ -22,6 +24,20 @@ class Model(L.LightningModule):
             nn.ReLU(),
             nn.Linear(embed_dim, 5)
         )
+
+        # Binary Metrics
+        self.loss_fn = nn.BCEWithLogitsLoss()
+        self.acc_fn_bin = Accuracy('binary')
+        self.f1_fn = F1Score('binary')
+        self.prec_fn = Precision('binary')
+        self.recall_fn = Recall('binary')
+        self.auc_fn = BinaryAUROC()
+
+        # Multilabel Metrics
+        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
+        self.cf1 = MultilabelF1Score(4, average='macro')
+        self.of1 = MultilabelF1Score(4, average='micro')
+        self.mAP = MultilabelAveragePrecision(4)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)

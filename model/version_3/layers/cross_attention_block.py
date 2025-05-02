@@ -18,6 +18,6 @@ class CrossAttnBlock(nn.Module):
 
     def forward(self, z, conditioning):
         z, _ = self.self_attn(z, z, z)
-        z, _ = self.cross_attn(conditioning, conditioning, z)
+        z, _ = self.cross_attn(z, conditioning, conditioning)
         z = self.mlp(z)
         return z
