@@ -108,16 +108,16 @@ class Model(L.LightningModule):
 
         self.log_dict(
             {
-                f'{split}/loss_bin': bin_loss,
-                f'{split}/acc_bin': acc_bin,
-                f'{split}/contrastive_loss': c_loss
+                f'{split}/loss_bin': bin_loss.detach().item(),
+                f'{split}/acc_bin': acc_bin.detach().item(),
+                f'{split}/contrastive_loss': c_loss.detach().item()
             }, prog_bar=True, on_epoch=True, on_step=True if split == 'Train' else False
         )
         
         self.log_dict(
             {
-                f'{split}/f1_bin': f1,
-                f'{split}/auc_bin': auc
+                f'{split}/f1_bin': f1.detach().item(),
+                f'{split}/auc_bin': auc.detach().item()
             }, on_step=False, on_epoch=True, prog_bar=True
         )
 
@@ -132,10 +132,10 @@ class Model(L.LightningModule):
 
             self.log_dict(
                 {
-                    f'{split}/cf1_multi': cf1,
-                    f'{split}/of1_multi': of1,
-                    f'{split}/mAP_multi': mAP,
-                    f'{split}/acc_multi': acc_multi
+                    f'{split}/cf1_multi': cf1.detach().item(),
+                    f'{split}/of1_multi': of1.detach().item(),
+                    f'{split}/mAP_multi': mAP.detach().item(),
+                    f'{split}/acc_multi': acc_multi.detach().item()
                 }, prog_bar=True, on_epoch=True, on_step=False
             )
         else:
