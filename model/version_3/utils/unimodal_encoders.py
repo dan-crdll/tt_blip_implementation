@@ -4,7 +4,7 @@ from torch import nn
 class ViT(nn.Module):
     def __init__(self, hf_repo, device='cpu', unfreeze_from_layer=0):
         super().__init__()
-        self.device = device
+        self.device = 'cuda'
         self.vit = ViTModel.from_pretrained(hf_repo)
         self.processor = ViTImageProcessor.from_pretrained(hf_repo)
 
@@ -26,7 +26,7 @@ class ViT(nn.Module):
 class BERT(nn.Module):
     def __init__(self, hf_repo, device='cpu', unfreeze_from_layer=0, n_layers=6):
         super().__init__()
-        self.device = device
+        self.device = 'cuda'
         self.bert = BertModel.from_pretrained(hf_repo)
         self.tokenizer = BertTokenizer.from_pretrained(hf_repo)
         self.n_layers = n_layers

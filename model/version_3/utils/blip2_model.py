@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 
 class Blip2Model(nn.Module):
-    def __init__(self, hf_repo, device=None, frozen=False):
+    def __init__(self, hf_repo, device='cuda', frozen=False):
         super().__init__()
         # Set device automatically if not specified
         if device is None:

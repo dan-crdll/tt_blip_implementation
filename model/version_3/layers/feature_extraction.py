@@ -39,7 +39,7 @@ class TextFeatureExtraction(nn.Module):
     
 
 class FeatureExtraction(nn.Module):
-    def __init__(self, device='cpu'):
+    def __init__(self, device='cuda'):
         super().__init__()
 
         self.feature_extractor_img = ImageFeatureExtraction(device) 
