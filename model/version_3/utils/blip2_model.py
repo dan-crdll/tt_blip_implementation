@@ -43,9 +43,9 @@ class Blip2Model(nn.Module):
 
         # Preprocess
         processed = self.processor(image, text, return_tensors='pt', padding=True)
-        x_img = processed['pixel_values'].to(self.device, non_blocking=True)
-        x_txt = processed['input_ids'].to(self.device, non_blocking=True)
-        x_attn_mask = processed['attention_mask'].to(self.device, non_blocking=True)
+        x_img = processed['pixel_values']#.to(self.device, non_blocking=True)
+        x_txt = processed['input_ids']#.to(self.device, non_blocking=True)
+        x_attn_mask = processed['attention_mask']#.to(self.device, non_blocking=True)
 
         with torch.amp.autocast(enabled=use_autocast and self.device.startswith("cuda"), device_type=self.device):
             z_img = self.model.vision_model(x_img)['last_hidden_state']
