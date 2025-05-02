@@ -1,4 +1,4 @@
-from transformers import Blip2Processor, Blip2ForImageTextRetrieval, AddedToken
+from transformers import Blip2Processor, Blip2QFormerConfig, Blip2QFormerModel, ViTModel, ViTImageProcessor, AddedToken
 import torch
 from torch import nn
 from PIL import Image
@@ -14,22 +14,26 @@ class Blip2Model(nn.Module):
 
         # Load processor and model to the correct device
         self.processor = Blip2Processor.from_pretrained(hf_repo)
-        self.model = Blip2ForImageTextRetrieval.from_pretrained(hf_repo)
+        config = Blip2QFormerConfig.from_pretrained(hf_repo)
+        config.encoder_hidden_size = 768
 
-        # Image token setup
-        self.processor.num_query_tokens = self.model.config.num_query_tokens
+        self.embedding = nn.Embedding(config.vocab_size, 768, padding_idx=0)
+        self.pos_embedding = nn.Embedding(512, 768)
+        
+        self.model = Blip2QFormerModel(config)
+
         image_token = AddedToken("<image>", normalized=False, special=True)
         self.processor.tokenizer.add_tokens([image_token], special_tokens=True)
 
-        self.model.resize_token_embeddings(len(self.processor.tokenizer), pad_to_multiple_of=64)
-        self.model.config.image_token_index = len(self.processor.tokenizer) - 1
+        self.vit = ViTModel.from_pretrained("google/vit-base-patch16-224")
+        self.vit_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
-        # Freeze backbone, train adapters/Qformer if desired
         for param in self.model.parameters():
-            param.requires_grad = False
-        if not frozen:
-            for param in self.model.qformer.parameters():
-                param.requires_grad = True
+            param.requires_grad_(True)
+
+        self.vit.eval()
+        for param in self.vit.parameters():
+            param.requires_grad_(False)
 
     def forward(self, image=None, text=None, use_autocast=True):
         # Determine batch size
@@ -43,31 +47,31 @@ class Blip2Model(nn.Module):
 
         # Preprocess
         processed = self.processor(image, text, return_tensors='pt', padding=True)
-        x_img = processed['pixel_values']#.to(self.device, non_blocking=True)
-        x_txt = processed['input_ids']#.to(self.device, non_blocking=True)
-        x_attn_mask = processed['attention_mask']#.to(self.device, non_blocking=True)
+        processed_image = self.vit_processor(image, return_tensors='pt')
+        x_img = processed_image['pixel_values'].to(self.device, non_blocking=True)
+        x_txt = processed['input_ids'].to(self.device, non_blocking=True)
+        x_attn_mask = processed['attention_mask'].to(self.device, non_blocking=True)
 
-        with torch.amp.autocast(enabled=use_autocast and self.device.startswith("cuda"), device_type=self.device):
-            z_img = self.model.vision_model(x_img)['last_hidden_state']
+        z_img = self.vit(x_img)['last_hidden_state']
 
-            # Image attention mask
-            encoder_attn_mask = torch.ones((z_img.shape[0], z_img.shape[1]), device=z_img.device) \
-                if image is not None else torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
+        # Image attention mask
+        encoder_attn_mask = torch.ones((z_img.shape[0], z_img.shape[1]), device=z_img.device) \
+            if image is not None else torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
 
-            # Text embedding logic
-            if no_text:
-                z_txt = torch.zeros((z_img.shape[0], z_img.shape[1], 768), device=z_img.device)
-                x_attn_mask = torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
-            else:
-                z_txt = self.model.embeddings(x_txt, x_attn_mask)
+        # Text embedding logic
+        if no_text:
+            z_txt = torch.zeros((z_img.shape[0], z_img.shape[1], 768), device=z_img.device)
+            x_attn_mask = torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
+        else:
+            z_txt = self.embedding(x_txt)
 
-            # QFormer
-            z = self.model.qformer(
-                encoder_hidden_states=z_img,
-                query_embeds=z_txt,
-                attention_mask=x_attn_mask,
-                encoder_attention_mask=encoder_attn_mask
-            )
+        # QFormer
+        z = self.model(
+            encoder_hidden_states=z_img,
+            query_embeds=z_txt,
+            attention_mask=x_attn_mask,
+            encoder_attention_mask=encoder_attn_mask
+        )
 
         return z.last_hidden_state
 

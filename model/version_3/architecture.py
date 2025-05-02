@@ -41,6 +41,7 @@ class Model(L.LightningModule):
         
         for layer in self.fusion_layer:
             z = layer(z, z_i)
+        z = z[:, 0]
         y = self.classifier(z)
         loss = contrastive_loss
         return y, loss

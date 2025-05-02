@@ -18,7 +18,7 @@ class ViT(nn.Module):
 
     def forward(self, image):
         inputs = self.processor(image, return_tensors='pt')
-        pixel_values = inputs['pixel_values']#.to(self.device, non_blocking=True)
+        pixel_values = inputs['pixel_values'].to(self.device, non_blocking=True)
         outputs = self.vit(pixel_values=pixel_values)
         return outputs.last_hidden_state  # (batch, seq_length, hidden_size)
 
@@ -41,8 +41,8 @@ class BERT(nn.Module):
 
     def forward(self, text):
         inputs = self.tokenizer(text, return_tensors='pt', padding=True, truncation=True)
-        input_ids = inputs['input_ids']#.to(self.device, non_blocking=True)
-        attention_mask = inputs['attention_mask']#.to(self.device, non_blocking=True)
+        input_ids = inputs['input_ids'].to(self.device, non_blocking=True)
+        attention_mask = inputs['attention_mask'].to(self.device, non_blocking=True)
         z = self.bert.embeddings(input_ids)
         for layer in self.bert.encoder.layer[:self.n_layers]:
             z = layer(z, attention_mask.float())[0]
