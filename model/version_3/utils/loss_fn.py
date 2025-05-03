@@ -87,12 +87,14 @@ class MocoLoss(nn.Module):
         # Predictors are p_i and p_t (from online encoder)
         # Contrastive pairs: (p_i, all_t_embs), (p_t, all_i_embs)
         l_itm = self.infonce_loss(p_i, all_t_embs)
+        l_itm += self.infonce_loss(p_i, all_i_embs)
 
         if not single_approach:
             l_itm += self.infonce_loss(p_t, all_i_embs)
-            l_itm += self.infonce_loss(p_i, all_i_embs)
             l_itm += self.infonce_loss(p_t, all_t_embs)
             l_itm /= 4
+        else:
+            l_itm /= 2
 
         if not single_approach:
             # Update queue

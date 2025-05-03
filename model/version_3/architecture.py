@@ -70,7 +70,7 @@ class Model(L.LightningModule):
         loss /= 2
 
         z_tm = self.multimodal_feature_extraction(img, txt)
-        l_m2it = self.moco_loss((z_tm[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters(), single_approach=True)
+        l_m2it = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
         loss += l_m2it
         loss /= 2
 
