@@ -43,6 +43,11 @@ class Model(L.LightningModule):
         self.of1 = MultilabelF1Score(4, average='micro')
         self.mAP = MultilabelAveragePrecision(4)
 
+        # Moving averages
+        self.moving_avg_1 = 1.0
+        self.moving_avg_2 = 1.0
+        self.alpha = 0.99
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
 
@@ -85,6 +90,12 @@ class Model(L.LightningModule):
         else:
             cls_loss = bin_loss
         # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
+
+        self.moving_avg_1 = self.alpha * self.moving_avg_1 + (1 - self.alpha) * c_loss
+        self.moving_avg_2 = self.alpha + self.moving_avg_2 + (1 - self.alpha) * cls_loss
+
+        c_loss = c_loss / (self.moving_avg_1 + 1e-8)
+        cls_loss = cls_loss / (self.moving_avg_2 + 1e-8)
 
         loss = c_loss + cls_loss
 
