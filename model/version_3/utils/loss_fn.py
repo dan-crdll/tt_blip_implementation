@@ -64,7 +64,7 @@ class MocoLoss(nn.Module):
         for m_param, param in zip(self.momentum_encoder.parameters(), model.parameters()):
             m_param.data = m_param.data * momentum + param.data * (1. - momentum)
 
-    def forward(self, pred, batch, model_parameters):
+    def forward(self, pred, batch, model_parameters, single_approach=False):
         text, image = batch
         BSZ = len(text)
         p_i, p_t = pred
@@ -87,18 +87,21 @@ class MocoLoss(nn.Module):
         # Predictors are p_i and p_t (from online encoder)
         # Contrastive pairs: (p_i, all_t_embs), (p_t, all_i_embs)
         l_itm = self.infonce_loss(p_i, all_t_embs)
-        l_itm += self.infonce_loss(p_t, all_i_embs)
-        l_itm += self.infonce_loss(p_i, all_i_embs)
-        l_itm += self.infonce_loss(p_t, all_t_embs)
-        l_itm /= 4
 
-        # Update queue
-        self._dequeue_and_enqueue(keys_i, keys_t)
+        if not single_approach:
+            l_itm += self.infonce_loss(p_t, all_i_embs)
+            l_itm += self.infonce_loss(p_i, all_i_embs)
+            l_itm += self.infonce_loss(p_t, all_t_embs)
+            l_itm /= 4
 
-        # Update momentum encoder (optional, do it outside if possible)
-        with torch.no_grad():
-            for m_param, param in zip(self.momentum_encoder.parameters(), model_parameters):
-                m_param.data = m_param.data * self.momentum + param.data * (1. - self.momentum)
-            self.momentum_encoder.eval()
+        if not single_approach:
+            # Update queue
+            self._dequeue_and_enqueue(keys_i, keys_t)
+
+            # Update momentum encoder (optional, do it outside if possible)
+            with torch.no_grad():
+                for m_param, param in zip(self.momentum_encoder.parameters(), model_parameters):
+                    m_param.data = m_param.data * self.momentum + param.data * (1. - self.momentum)
+                self.momentum_encoder.eval()
 
         return l_itm
