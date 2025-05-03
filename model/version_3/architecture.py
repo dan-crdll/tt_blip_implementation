@@ -46,7 +46,7 @@ class Model(L.LightningModule):
         self.mAP = MultilabelAveragePrecision(4)
 
         # Grad Norm
-        # self.log_var = nn.Parameter(torch.zeros(2))
+        self.log_var = nn.Parameter(torch.zeros(2))
         self.init = True 
         self.first_biloss = 0.0
         self.first_multiloss = 0.0
@@ -98,7 +98,7 @@ class Model(L.LightningModule):
             self.first_contrastiveloss = c_loss.detach()
             self.init = False
         c_loss = c_loss / self.first_contrastiveloss
-        
+
         pred_bin = pred[:, 0]
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
