@@ -45,11 +45,8 @@ class Model(L.LightningModule):
         self.of1 = MultilabelF1Score(4, average='micro')
         self.mAP = MultilabelAveragePrecision(4)
 
-        # Moving averages
-        self.moving_avg_1 = 1.0
-        self.moving_avg_2 = 1.0
-        self.moving_avg_3 = 1.0
-        self.alpha = 0.999
+        # Grad Norm
+        self.log_var = nn.Parameters(torch.zeros(2))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
@@ -82,6 +79,13 @@ class Model(L.LightningModule):
 
         return y, loss
     
+    def total_loss(self, l_contrastive, l_classification):
+        weights = torch.exp(-self.log_var)
+        losses = torch.stack([l_contrastive, l_contrastive])
+        
+        total = torch.sum(weights * losses + self.log_var)
+        return total
+    
     def step(self, split, batch):
         images, texts, (y_bin, y_multi) = batch 
 
@@ -89,28 +93,16 @@ class Model(L.LightningModule):
         pred_bin = pred[:, 0]
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        # Normalizing binary loss
-        self.moving_avg_2 = self.alpha + self.moving_avg_2 + (1 - self.alpha) * bin_loss.detach()
-        bin_loss = bin_loss / (self.moving_avg_2 + 1e-8)
-
         mask = (nn.functional.sigmoid(pred_bin) < 0.5)
 
         pred_multi = pred[:, 1:]
         if mask.sum() > 0:
             multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
-            # Normalizing multi loss
-            self.moving_avg_3 = self.alpha * self.moving_avg_3 + (1 - self.alpha) * multi_loss.detach()
-            multi_loss = multi_loss / (self.moving_avg_3 + 1e-8)
             cls_loss = bin_loss + multi_loss
         else:
             cls_loss = bin_loss
-        # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
-        # Normalizing contrastive loss
-        self.moving_avg_1 = self.alpha * self.moving_avg_1 + (1 - self.alpha) * c_loss.detach()
-        c_loss = c_loss / (self.moving_avg_1 + 1e-8)
-
-        loss = 0.3 * c_loss + 0.7 * cls_loss
+        loss = self.total_loss(c_loss, cls_loss)
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)
