@@ -39,13 +39,13 @@ class TextFeatureExtraction(nn.Module):
     
 
 class FeatureExtraction(nn.Module):
-    def __init__(self, device='cuda'):
+    def __init__(self, device='cuda', temp=1.0):
         super().__init__()
 
         self.feature_extractor_img = ImageFeatureExtraction(device) 
         self.feature_extractor_txt = TextFeatureExtraction(device)
 
-        self.infonce_loss = InfoNCE(temp=1.0)
+        self.infonce_loss = InfoNCE(temp=temp)
 
     def forward(self, img, txt):
         z_i, (cls_vit, cls_blip_i) = self.feature_extractor_img(img)
@@ -54,6 +54,4 @@ class FeatureExtraction(nn.Module):
         l_i2t = self.infonce_loss(cls_blip_i, cls_bert)
         l_t2i = self.infonce_loss(cls_blip_t, cls_vit)
 
-        l_itm = (self.infonce_loss(z_i[:, 0], z_t[:, 0]) + self.infonce_loss(z_t[:, 0], z_i[:, 0])) / 2.0
-
-        return (z_i, z_t), ((l_i2t + l_t2i) / 2.0 + l_itm) / 2.0
+        return (z_i, z_t), (l_i2t + l_t2i) / 2.0

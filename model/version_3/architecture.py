@@ -1,18 +1,20 @@
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
+from model.version_3.utils.loss_fn import MocoLoss
 from torch import nn 
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
 import torch.nn.functional as F
 import torch
 import lightning as L
+import copy
 
 
 class Model(L.LightningModule):
-    def __init__(self, embed_dim, num_heads, hidden_dim):
+    def __init__(self, embed_dim, num_heads, hidden_dim, temp=1.0, momentum=0.9, queue_size=32):
         super().__init__()
 
-        self.feature_extraction = FeatureExtraction('cuda')
+        self.feature_extraction = FeatureExtraction('cuda', temp)
 
         self.fusion_layer = nn.ModuleList([
             CrossAttnBlock(embed_dim, num_heads, hidden_dim) 
@@ -24,6 +26,8 @@ class Model(L.LightningModule):
             nn.ReLU(),
             nn.Linear(embed_dim, 5)
         )
+
+        self.moco_loss = MocoLoss(copy.deepcopy(self.feature_extraction), momentum=momentum, queue_size=queue_size, temp=temp)
 
         # Binary Metrics
         self.loss_fn = nn.BCEWithLogitsLoss()
@@ -53,13 +57,16 @@ class Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, img, txt):
-        (z_i, z), contrastive_loss = self.feature_extraction(img, txt)
-        
+        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
+        loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), copy.deepcopy(self.feature_extraction.parameters()))
+        loss /= 2
+
+        z = z_t
         for layer in self.fusion_layer:
             z = layer(z, z_i)
         z = z[:, 0]
         y = self.classifier(z)
-        loss = contrastive_loss
+
         return y, loss
     
     def step(self, split, batch):

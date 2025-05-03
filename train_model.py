@@ -22,13 +22,13 @@ def seed_everything(seed=42):
 
 seed_everything()
 
-def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations, gpus):
+def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations, gpus, temp, momentum, queue_size):
     print("Downloading DGM4")
     if 'data' not in os.listdir('.'):
         download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
-    model = Model(768, num_heads, hidden_dim)
+    model = Model(768, num_heads, hidden_dim, temp, momentum, queue_size)
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
 
     torch.set_float32_matmul_precision('high')
@@ -62,5 +62,8 @@ if __name__=="__main__":
         grad_acc=params["grad_acc"],
         origins=params['origins'],
         manipulations=params['manipulations'],
-        gpus=params['gpus']
+        gpus=params['gpus'],
+        temp=params['temp'],
+        momentum=params['momentum'],
+        queue_size=params['queue_size'],
     )
