@@ -20,7 +20,7 @@ class CrossAttnBlock(nn.Module):
 
     def forward(self, z, z_i, z_m):
         z, _ = self.self_attn(z, z, z)
-        z_it, _ = self.cross_attn_it(z, z_i, z_m)
+        z_it, _ = self.cross_attn_it(z, z_i, z_i)
         z_tm, _ = self.cross_attn_tm(z, z_m, z_m)
         z = self.mlp(z_it + z_tm)
         return z
