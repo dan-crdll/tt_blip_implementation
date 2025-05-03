@@ -87,7 +87,7 @@ class MocoLoss(nn.Module):
             Scalar MoCo loss
         """
         text, image = batch
-        BSZ = image.size(0)
+        BSZ = len(image)
         p_i, p_t = pred  # online encoder output
 
         device = p_i.device

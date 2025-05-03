@@ -14,7 +14,7 @@ from model.version_3.utils.blip2_model import Blip2Model
 from model.version_3.utils.loss_fn import MocoLoss
 
 
-class MultimodalModel(L.LightningModule):
+class Model(L.LightningModule):
     def __init__(self, embed_dim, num_heads, hidden_dim, temp=1.0, momentum=0.9, queue_size=32):
         super().__init__()
 
@@ -71,18 +71,7 @@ class MultimodalModel(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
 
-        def lr_lambda(step):
-            warmup_steps = int(0.05 * self.trainer.max_steps)
-            if step < warmup_steps:
-                return step / warmup_steps
-            progress = (step - warmup_steps) / (self.trainer.max_steps - warmup_steps)
-            return 0.5 * (1 + torch.cos(progress * torch.pi))
-
-        scheduler = {
-            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
-            "interval": "step"
-        }
-        return [optimizer], [scheduler]
+        return optimizer
 
     def forward(self, img, txt):
         # Unimodal features and contrastive loss
@@ -154,12 +143,16 @@ class MultimodalModel(L.LightningModule):
                 self.val_acc_multi.update(pred_multi_sigmoid, y_multi[mask])
                 self.val_cf1_multi.update(pred_multi_sigmoid, y_multi[mask])
                 self.val_of1_multi.update(pred_multi_sigmoid, y_multi[mask])
-                self.val_map_multi.update(pred_multi_sigmoid, y_multi[mask])
+                self.val_map_multi.update(pred_multi_sigmoid, y_multi[mask].long())
 
         return loss
 
     def training_step(self, batch, batch_idx):
         return self._step("Train", batch)
+    
+    def on_train_epoch_end(self):
+        self.training_step_outputs.clear()
+        torch.cuda.empty_cache()
 
     def validation_step(self, batch, batch_idx):
         return self._step("Val", batch)
