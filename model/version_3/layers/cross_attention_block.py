@@ -25,10 +25,9 @@ class CrossAttnBlock(nn.Module):
         z_tm, _ = self.cross_attn_tm(z, z_m, z_m)
 
         # Apply attention weights
-        w = self.weights.repeat((z.shape[0], 1))
-        lambda_1 = 1 / (w[:, 0] ** 2 + 1e-8)
-        lambda_2 = 1 / (w[:, 1] ** 2 + 1e-8)
-        lambda_3 = 1 / (w[:, 2] ** 2 + 1e-8)
+        lambda_1 = 1 / (w[0] ** 2 + 1e-8)
+        lambda_2 = 1 / (w[1] ** 2 + 1e-8)
+        lambda_3 = 1 / (w[2] ** 2 + 1e-8)
 
         z_total = lambda_1 * z + lambda_2 * z_it + lambda_3 * z_tm
 

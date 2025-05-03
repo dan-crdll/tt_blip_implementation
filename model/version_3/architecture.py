@@ -46,7 +46,7 @@ class Model(L.LightningModule):
         self.mAP = MultilabelAveragePrecision(4)
 
         # Grad Norm
-        self.log_var = nn.Parameters(torch.zeros(2))
+        self.log_var = nn.Parameter(torch.zeros(2))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
