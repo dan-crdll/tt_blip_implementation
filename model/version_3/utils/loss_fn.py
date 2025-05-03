@@ -3,13 +3,20 @@ from torch import nn
 from torch.nn import functional as F
 
 class InfoNCE(nn.Module):
-    def __init__(self, temp=1.0):
+    def __init__(self, temp=1.0, embed_dim=768, projected_dim=256):
         super().__init__()
         self.temp = temp
+        self.projector_a = nn.Linear(embed_dim, projected_dim)
+        self.projector_b = nn.Linear(embed_dim, projected_dim)
 
     def forward(self, emb_a, emb_b):
+        # Project the embeddings
+        emb_a = self.projector_a(emb_a)
+        emb_b = self.projector_b(emb_b)
+        # Normalize the embeddings
         emb_a = F.normalize(emb_a, dim=-1)
         emb_b = F.normalize(emb_b, dim=-1)
+        # Compute the InfoNCE loss
         logits = emb_a @ emb_b.T / self.temp
         targets = torch.arange(emb_a.shape[0], device=emb_a.device)
         loss = F.cross_entropy(logits, targets)
