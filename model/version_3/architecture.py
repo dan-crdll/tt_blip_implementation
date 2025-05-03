@@ -125,6 +125,9 @@ class Model(L.LightningModule):
             }, on_step=False, on_epoch=True, prog_bar=True
         )
 
+        if split == 'Train':
+            self.log("W_contrastive, W_classification", torch.exp(-self.log_var).detach())
+
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)
 
