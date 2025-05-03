@@ -17,9 +17,10 @@ class Blip2Model(nn.Module):
         self.processor = Blip2Processor.from_pretrained(hf_repo)
         config = Blip2QFormerConfig.from_pretrained(hf_repo)
         config.encoder_hidden_size = 384
+        config.hidden_size = 384
 
-        self.embedding = nn.Embedding(config.vocab_size, 768, padding_idx=0)
-        self.pos_embedding = nn.Embedding(512, 768)
+        self.embedding = nn.Embedding(config.vocab_size, 384, padding_idx=0)
+        self.pos_embedding = nn.Embedding(512, 384)
         
         self.model = Blip2QFormerModel(config)
 
@@ -61,7 +62,7 @@ class Blip2Model(nn.Module):
 
         # Text embedding logic
         if no_text:
-            z_txt = torch.zeros((z_img.shape[0], z_img.shape[1], 768), device=z_img.device)
+            z_txt = torch.zeros((z_img.shape[0], z_img.shape[1], 384), device=z_img.device)
             x_attn_mask = torch.zeros((z_img.shape[0], z_img.shape[1]), device=z_img.device)
         else:
             x_txt = x_txt.to(self.device)

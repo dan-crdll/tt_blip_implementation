@@ -28,7 +28,7 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
         download_dgm4(origins, manipulations)
     print("Dataset Downloaded")
 
-    model = Model(768, num_heads, hidden_dim, temp, momentum, queue_size)
+    model = Model(384, num_heads, hidden_dim, temp, momentum, queue_size)
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
 
     torch.set_float32_matmul_precision('high')

@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class InfoNCE(nn.Module):
-    def __init__(self, temp=1.0, embed_dim=768, projected_dim=256):
+    def __init__(self, temp=1.0, embed_dim=384, projected_dim=256):
         super().__init__()
         self.temp = temp
         self.projector_a = nn.Linear(embed_dim, projected_dim)
@@ -31,8 +31,8 @@ class MocoLoss(nn.Module):
             param.requires_grad = False
         self.momentum_encoder.eval()
 
-        self.register_buffer("queue_i", torch.zeros(queue_size, 768))
-        self.register_buffer("queue_t", torch.zeros(queue_size, 768))
+        self.register_buffer("queue_i", torch.zeros(queue_size, 384))
+        self.register_buffer("queue_t", torch.zeros(queue_size, 384))
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))  # points to the next position in the queue
 
         self.momentum = momentum
@@ -73,7 +73,7 @@ class MocoLoss(nn.Module):
         # Compute keys using momentum encoder
         with torch.no_grad():
             (z_i, z_t), *_ = self.momentum_encoder(text, image)
-            keys_i = z_i[:, 0].detach()  # [BSZ, 768]
+            keys_i = z_i[:, 0].detach()  # [BSZ, 384]
             keys_t = z_t[:, 0].detach()
             # Get all negatives from queue (detach to ensure not to track grads)
             queue_i = self.queue_i.detach()

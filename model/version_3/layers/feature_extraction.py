@@ -10,12 +10,10 @@ class ImageFeatureExtraction(nn.Module):
         super().__init__()
         self.vit = ViT("WinKawaks/vit-small-patch16-224", device, unfreeze_from_layer=9)
         self.blip = Blip2Model("Salesforce/blip2-itm-vit-g", device)
-        self.vit_projector = nn.Linear(384, 768)
 
     def forward(self, x):
         z_vit = self.vit(x)
-        z_vit = self.vit_projector(z_vit)
-        
+
         z_blip = self.blip(image=x)
 
         cls = ((z_vit[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
@@ -28,11 +26,13 @@ class ImageFeatureExtraction(nn.Module):
 class TextFeatureExtraction(nn.Module):
     def __init__(self, device='cpu'):
         super().__init__()
-        self.bert = BERT("distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device, unfreeze_from_layer=9)
+        self.bert = BERT("distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device, unfreeze_from_layer=3)
+        self.bert_projector = nn.Linear(768, 384)
         self.blip = Blip2Model("Salesforce/blip2-itm-vit-g", device)
 
     def forward(self, x):
         z_bert = self.bert(x)
+        z_bert = self.bert_projector(z_bert)
         z_blip = self.blip(text=x)
 
         cls = ((z_bert[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
