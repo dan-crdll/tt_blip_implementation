@@ -46,7 +46,11 @@ class Model(L.LightningModule):
         self.mAP = MultilabelAveragePrecision(4)
 
         # Grad Norm
-        self.log_var = nn.Parameter(torch.zeros(2))
+        # self.log_var = nn.Parameter(torch.zeros(2))
+        self.init = True 
+        self.first_biloss = 0.0
+        self.first_multiloss = 0.0
+        self.first_contrastiveloss = 0.0
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
@@ -90,14 +94,29 @@ class Model(L.LightningModule):
         images, texts, (y_bin, y_multi) = batch 
 
         pred, c_loss = self.forward(images, texts)
+        if self.init:
+            self.first_contrastiveloss = c_loss.detach()
+            self.init = False
+        c_loss = c_loss / self.first_contrastiveloss
+        
         pred_bin = pred[:, 0]
 
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
+
+        if self.init:
+            self.first_biloss = bin_loss.detach()
+            self.init = False
+        bin_loss = bin_loss / self.first_biloss
+
         mask = (nn.functional.sigmoid(pred_bin) < 0.5)
 
         pred_multi = pred[:, 1:]
         if mask.sum() > 0:
             multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
+            if self.init:
+                self.first_multiloss = multi_loss.detach()
+                self.init = False 
+            multi_loss = multi_loss / self.first_multiloss
             cls_loss = bin_loss + multi_loss
         else:
             cls_loss = bin_loss
@@ -126,7 +145,9 @@ class Model(L.LightningModule):
         )
 
         if split == 'Train':
-            self.log("W_contrastive, W_classification", torch.exp(-self.log_var).detach())
+            self.log("W/W_contrastive", torch.exp(-self.log_var[0]).detach())
+            self.log("W/W_classification", torch.exp(-self.log_var[1]).detach())
+
 
         # -- MULTILABEL CLASSIFICATION --
         pred_multi = nn.functional.sigmoid(pred_multi)

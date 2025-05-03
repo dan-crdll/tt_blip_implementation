@@ -10,7 +10,7 @@ class CrossAttnBlock(nn.Module):
         self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
         self.cross_attn_it = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
         self.cross_attn_tm = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.weights = nn.Parameter(torch.randn((1, 3)), requires_grad=True)
+        self.weights = nn.Parameter(torch.ones(3), requires_grad=True)
 
         self.mlp = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
