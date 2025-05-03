@@ -61,7 +61,9 @@ class MocoLoss(nn.Module):
         for i in range(self.first_idx, self.first_idx + BSZ):
             self.queue_i[i % self.queue_size] = z_i[i, 0].detach()
             self.queue_t[i % self.queue_size] = z_t[i, 0].detach()
-        self.first_idx += BSZ
+            
+        if self.last_idx >= self.queue_size:
+            self.first_idx += BSZ
         self.last_idx += BSZ
 
         model_parameters = list(model_parameters)
