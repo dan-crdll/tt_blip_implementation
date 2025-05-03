@@ -106,9 +106,7 @@ class MultimodalModel(L.LightningModule):
         return y, loss
 
     def total_loss(self, contrastive, classification):
-        weights = torch.exp(-self.log_var)
-        losses = torch.stack([contrastive, classification])
-        return torch.sum(weights * losses + self.log_var)
+        return contrastive + 2 * classification
 
     def _step(self, split, batch):
         img, txt, (y_bin, y_multi) = batch
@@ -140,7 +138,7 @@ class MultimodalModel(L.LightningModule):
         loss = self.total_loss(c_loss, cls_loss)
 
         # Logging losses
-        self.log(f"{split}/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(f"{split}/loss", loss, on_step=True if split == "Train" else False, on_epoch=True, prog_bar=True)
         self.log(f"{split}/loss_bin", bin_loss, on_step=False, on_epoch=True)
         self.log(f"{split}/contrastive_loss", c_loss, on_step=False, on_epoch=True)
 
