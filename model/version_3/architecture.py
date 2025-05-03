@@ -1,5 +1,6 @@
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
+from model.version_3.utils.blip2_model import Blip2Model
 from model.version_3.utils.loss_fn import MocoLoss
 from torch import nn 
 from torchmetrics import Accuracy, F1Score, Precision, Recall
@@ -15,6 +16,7 @@ class Model(L.LightningModule):
         super().__init__()
 
         self.feature_extraction = FeatureExtraction('cuda', temp)
+        self.multimodal_feature_extraction = Blip2Model("Salesforce/blip2-itm-vit-g")
 
         self.fusion_layer = nn.ModuleList([
             CrossAttnBlock(embed_dim, num_heads, hidden_dim) 
@@ -63,8 +65,13 @@ class Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, img, txt):
-        (z_i, z_t, z_tm), contrastive_loss = self.feature_extraction(img, txt)
+        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
         loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
+        loss /= 2
+
+        z_tm = self.multimodal_feature_extraction(img, txt)
+        l_m2it = (self.infonce_loss(z_tm[:, 0], z_i[:, 0]) + self.infonce_loss(z_tm[:, 0], z_t[:, 0])) / 2.0
+        loss += l_m2it
         loss /= 2
 
         z = z_t
