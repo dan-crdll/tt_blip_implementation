@@ -91,8 +91,8 @@ class Model(L.LightningModule):
             cls_loss = bin_loss
         # loss = 0.2 * c_loss + 0.4 * multi_loss + 0.4 * bin_loss
 
-        self.moving_avg_1 = self.alpha * self.moving_avg_1 + (1 - self.alpha) * c_loss
-        self.moving_avg_2 = self.alpha + self.moving_avg_2 + (1 - self.alpha) * cls_loss
+        self.moving_avg_1 = self.alpha * self.moving_avg_1 + (1 - self.alpha) * c_loss.detach()
+        self.moving_avg_2 = self.alpha + self.moving_avg_2 + (1 - self.alpha) * cls_loss.detach()
 
         c_loss = c_loss / (self.moving_avg_1 + 1e-8)
         cls_loss = cls_loss / (self.moving_avg_2 + 1e-8)
