@@ -47,7 +47,7 @@ class Model(L.LightningModule):
         self.moving_avg_1 = 1.0
         self.moving_avg_2 = 1.0
         self.moving_avg_3 = 1.0
-        self.alpha = 0.99
+        self.alpha = 0.999
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
@@ -63,14 +63,14 @@ class Model(L.LightningModule):
         return [optimizer], [scheduler]
     
     def forward(self, img, txt):
-        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
+        (z_i, z_t, z_tm), contrastive_loss = self.feature_extraction(img, txt)
         loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
         loss /= 2
 
         z = z_t
         for layer in self.fusion_layer:
-            z = layer(z, z_i)
-        z = z[:, 0]
+            z = layer(z, z_i, z_tm)
+        z = F.adaptive_avg_pool1d(z.permute(0, 2, 1), 1).squeeze()
         y = self.classifier(z)
 
         return y, loss
@@ -103,7 +103,7 @@ class Model(L.LightningModule):
         self.moving_avg_1 = self.alpha * self.moving_avg_1 + (1 - self.alpha) * c_loss.detach()
         c_loss = c_loss / (self.moving_avg_1 + 1e-8)
 
-        loss = c_loss + cls_loss
+        loss = 0.3 * c_loss + 0.7 * cls_loss
 
         # -- BINARY CLASSIFICATION --
         pred_bin = nn.functional.sigmoid(pred_bin)

@@ -47,14 +47,18 @@ class FeatureExtraction(nn.Module):
 
         self.feature_extractor_img = ImageFeatureExtraction(device) 
         self.feature_extractor_txt = TextFeatureExtraction(device)
+        self.feature_extractor_blip = Blip2Model("Salesforce/blip2-itm-vit-g")
 
         self.infonce_loss = InfoNCE(temp=temp)
 
     def forward(self, img, txt):
         z_i, (cls_vit, cls_blip_i) = self.feature_extractor_img(img)
         z_t, (cls_bert, cls_blip_t) = self.feature_extractor_txt(txt)
+        z_tm = self.feature_extractor_blip(img, txt)
 
         l_i2t = self.infonce_loss(cls_blip_i, cls_bert)
         l_t2i = self.infonce_loss(cls_blip_t, cls_vit)
 
-        return (z_i, z_t), (l_i2t + l_t2i) / 2.0
+        l_m2it = (self.infonce_loss(z_tm[:, 0], z_i[:, 0]) + self.infonce_loss(z_tm[:, 0], z_t[:, 0])) / 2.0
+
+        return (z_i, z_t, z_tm), (l_i2t + l_t2i + l_m2it) / 3.0
