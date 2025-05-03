@@ -96,7 +96,6 @@ class Model(L.LightningModule):
         pred, c_loss = self.forward(images, texts)
         if self.init:
             self.first_contrastiveloss = c_loss.detach()
-            self.init = False
         c_loss = c_loss / self.first_contrastiveloss
 
         pred_bin = pred[:, 0]
@@ -105,7 +104,6 @@ class Model(L.LightningModule):
 
         if self.init:
             self.first_biloss = bin_loss.detach()
-            self.init = False
         bin_loss = bin_loss / self.first_biloss
 
         mask = (nn.functional.sigmoid(pred_bin) < 0.5)
