@@ -1,188 +1,188 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchmetrics
+import lightning as L
+import copy
+
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
+
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from model.version_3.utils.blip2_model import Blip2Model
 from model.version_3.utils.loss_fn import MocoLoss
-from torch import nn 
-from torchmetrics import Accuracy, F1Score, Precision, Recall
-from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-import torch.nn.functional as F
-import torch
-import lightning as L
-import copy
 
 
-class Model(L.LightningModule):
+class MultimodalModel(L.LightningModule):
     def __init__(self, embed_dim, num_heads, hidden_dim, temp=1.0, momentum=0.9, queue_size=32):
         super().__init__()
 
+        # -- Feature Extraction Modules --
         self.feature_extraction = FeatureExtraction('cuda', temp)
         self.multimodal_feature_extraction = Blip2Model("Salesforce/blip2-itm-vit-g")
 
+        # -- Cross-Attention Fusion Layers --
         self.fusion_layer = nn.ModuleList([
-            CrossAttnBlock(embed_dim, num_heads, hidden_dim) 
-            for i in range(6)
+            CrossAttnBlock(embed_dim, num_heads, hidden_dim)
+            for _ in range(6)
         ])
 
+        # -- Classification Head --
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
-            nn.Linear(embed_dim, 5)
+            nn.Linear(embed_dim, 5)  # 1 binary + 4 multilabel outputs
         )
 
-        self.moco_loss = MocoLoss(copy.deepcopy(self.feature_extraction), momentum=momentum, queue_size=queue_size, temp=temp)
-
-        # Binary Metrics
+        # -- Loss Functions --
         self.loss_fn = nn.BCEWithLogitsLoss()
-        self.acc_fn_bin = Accuracy('binary')
-        self.f1_fn = F1Score('binary')
-        self.prec_fn = Precision('binary')
-        self.recall_fn = Recall('binary')
-        self.auc_fn = BinaryAUROC()
+        self.moco_loss = MocoLoss(
+            copy.deepcopy(self.feature_extraction),
+            momentum=momentum,
+            queue_size=queue_size,
+            temp=temp
+        )
 
-        # Multilabel Metrics
-        self.acc_fn_multi = Accuracy('multilabel', num_labels=4)
-        self.cf1 = MultilabelF1Score(4, average='macro')
-        self.of1 = MultilabelF1Score(4, average='micro')
-        self.mAP = MultilabelAveragePrecision(4)
-
-        # Grad Norm
+        # -- Log Variance for Uncertainty Weighting --
         self.log_var = nn.Parameter(torch.zeros(2))
-        self.init = True 
-        self.first_biloss = 0.0
-        self.first_multiloss = 0.0
-        self.first_contrastiveloss = 0.0
+
+        # -- Init Tracking for Normalizing Loss Weights --
+        self.init = True
+        self.first_contrastive = 1.0
+        self.first_binary = 1.0
+        self.first_multilabel = 1.0
+
+        # -- Metrics (Validation Only) --
+        self._init_metrics()
+
+    def _init_metrics(self):
+        # Binary classification metrics
+        self.val_acc_bin = Accuracy(task='binary')
+        self.val_f1_bin = F1Score(task='binary')
+        self.val_auc_bin = BinaryAUROC()
+
+        # Multilabel classification metrics (4 labels)
+        self.val_acc_multi = Accuracy(task='multilabel', num_labels=4)
+        self.val_cf1_multi = MultilabelF1Score(num_labels=4, average='macro')
+        self.val_of1_multi = MultilabelF1Score(num_labels=4, average='micro')
+        self.val_map_multi = MultilabelAveragePrecision(num_labels=4)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
 
-        def lr_lambda(current_step):
+        def lr_lambda(step):
             warmup_steps = int(0.05 * self.trainer.max_steps)
-            if current_step < warmup_steps:
-                return current_step / warmup_steps
-            return 0.5 * (1 + torch.cos(torch.tensor(current_step - warmup_steps)/(self.trainer.max_steps - warmup_steps) * 3.1416))
+            if step < warmup_steps:
+                return step / warmup_steps
+            progress = (step - warmup_steps) / (self.trainer.max_steps - warmup_steps)
+            return 0.5 * (1 + torch.cos(progress * torch.pi))
 
-        scheduler = {"scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
-                "interval":"step"}
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+            "interval": "step"
+        }
         return [optimizer], [scheduler]
-    
+
     def forward(self, img, txt):
+        # Unimodal features and contrastive loss
         (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
-        loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
-        loss /= 2
+        moco = self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
+        loss = (contrastive_loss + moco) / 2
 
+        # Multimodal features and auxiliary moco loss
         z_tm = self.multimodal_feature_extraction(img, txt)
-        l_m2it = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
-        loss += l_m2it
-        loss /= 2
+        aux_moco = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
+        loss = (loss + aux_moco) / 2
 
+        # Fusion via attention blocks
         z = z_t
         for layer in self.fusion_layer:
             z = layer(z, z_i, z_tm)
-        z = F.adaptive_avg_pool1d(z.permute(0, 2, 1), 1).squeeze()
+        z = F.adaptive_avg_pool1d(z.permute(0, 2, 1), 1).squeeze(-1)
+
+        # Classification
         y = self.classifier(z)
-
         return y, loss
-    
-    def total_loss(self, l_contrastive, l_classification):
-        weights = torch.exp(-self.log_var)
-        losses = torch.stack([l_contrastive, l_contrastive])
-        
-        total = torch.sum(weights * losses + self.log_var)
-        return total
-    
-    def step(self, split, batch):
-        images, texts, (y_bin, y_multi) = batch 
 
-        pred, c_loss = self.forward(images, texts)
+    def total_loss(self, contrastive, classification):
+        weights = torch.exp(-self.log_var)
+        losses = torch.stack([contrastive, classification])
+        return torch.sum(weights * losses + self.log_var)
+
+    def _step(self, split, batch):
+        img, txt, (y_bin, y_multi) = batch
+        pred, c_loss = self(img, txt)
+
         if self.init:
-            self.first_contrastiveloss = c_loss.detach()
-        c_loss = c_loss / self.first_contrastiveloss
+            self.first_contrastive = c_loss.detach()
+        c_loss /= self.first_contrastive
 
         pred_bin = pred[:, 0]
-
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-
         if self.init:
-            self.first_biloss = bin_loss.detach()
-        bin_loss = bin_loss / self.first_biloss
+            self.first_binary = bin_loss.detach()
+        bin_loss /= self.first_binary
 
-        mask = (nn.functional.sigmoid(pred_bin) < 0.5)
-
+        mask = (torch.sigmoid(pred_bin) < 0.5)
         pred_multi = pred[:, 1:]
+
         if mask.sum() > 0:
             multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
             if self.init:
-                self.first_multiloss = multi_loss.detach()
-                self.init = False 
-            multi_loss = multi_loss / self.first_multiloss
+                self.first_multilabel = multi_loss.detach()
+                self.init = False
+            multi_loss /= self.first_multilabel
             cls_loss = bin_loss + multi_loss
         else:
             cls_loss = bin_loss
 
         loss = self.total_loss(c_loss, cls_loss)
 
-        # -- BINARY CLASSIFICATION --
-        pred_bin = nn.functional.sigmoid(pred_bin)
-        acc_bin = self.acc_fn_bin(pred_bin, y_bin.float())
-        f1 = self.f1_fn(pred_bin, y_bin.float())
-        auc = self.auc_fn(pred_bin, y_bin.float())
+        # Logging losses
+        self.log(f"{split}/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(f"{split}/loss_bin", bin_loss, on_step=False, on_epoch=True)
+        self.log(f"{split}/contrastive_loss", c_loss, on_step=False, on_epoch=True)
 
-        self.log_dict(
-            {
-                f'{split}/loss_bin': bin_loss.detach().item(),
-                f'{split}/acc_bin': acc_bin.detach().item(),
-                f'{split}/contrastive_loss': c_loss.detach().item()
-            }, prog_bar=True, on_epoch=True, on_step=True if split == 'Train' else False
-        )
-        
-        self.log_dict(
-            {
-                f'{split}/f1_bin': f1.detach().item(),
-                f'{split}/auc_bin': auc.detach().item()
-            }, on_step=False, on_epoch=True, prog_bar=True
-        )
+        # Validation metrics
+        if split == 'Val':
+            pred_bin_sigmoid = torch.sigmoid(pred_bin)
+            self.val_acc_bin.update(pred_bin_sigmoid, y_bin)
+            self.val_f1_bin.update(pred_bin_sigmoid, y_bin)
+            self.val_auc_bin.update(pred_bin_sigmoid, y_bin)
 
-        if split == 'Train':
-            self.log("W/W_contrastive", torch.exp(-self.log_var[0]).detach())
-            self.log("W/W_classification", torch.exp(-self.log_var[1]).detach())
+            if mask.sum() > 0:
+                pred_multi_sigmoid = torch.sigmoid(pred_multi[mask])
+                self.val_acc_multi.update(pred_multi_sigmoid, y_multi[mask])
+                self.val_cf1_multi.update(pred_multi_sigmoid, y_multi[mask])
+                self.val_of1_multi.update(pred_multi_sigmoid, y_multi[mask])
+                self.val_map_multi.update(pred_multi_sigmoid, y_multi[mask])
 
-
-        # -- MULTILABEL CLASSIFICATION --
-        pred_multi = nn.functional.sigmoid(pred_multi)
-
-        if mask.sum() > 0:
-            cf1 = self.cf1(pred_multi[mask], y_multi[mask].float())
-            of1 = self.of1(pred_multi[mask], y_multi[mask].float())
-            mAP = self.mAP(pred_multi[mask], y_multi[mask].long())
-            acc_multi = self.acc_fn_multi(pred_multi[mask], y_multi[mask].float())
-
-            self.log_dict(
-                {
-                    f'{split}/cf1_multi': cf1.detach().item(),
-                    f'{split}/of1_multi': of1.detach().item(),
-                    f'{split}/mAP_multi': mAP.detach().item(),
-                    f'{split}/acc_multi': acc_multi.detach().item()
-                }, prog_bar=True, on_epoch=True, on_step=False
-            )
-        else:
-            self.log_dict(
-                {
-                    f'{split}/cf1_multi': 0.0,
-                    f'{split}/of1_multi': 0.0,
-                    f'{split}/mAP_multi': 0.0,
-                    f'{split}/acc_multi': 0.0
-                }, prog_bar=True, on_epoch=True, on_step=False
-            )
-
-        # -- GENERAL LOSS --
-        self.log(f"{split}/loss", loss, prog_bar=True, on_epoch=True, on_step=True)
-        return loss 
-    
-
-    def training_step(self, batch):
-        loss = self.step("Train", batch)
-        return loss 
-    
-    def validation_step(self, batch):
-        loss = self.step("Val", batch)
         return loss
+
+    def training_step(self, batch, batch_idx):
+        return self._step("Train", batch)
+
+    def validation_step(self, batch, batch_idx):
+        return self._step("Val", batch)
+
+    def on_validation_epoch_end(self):
+        # Log binary metrics
+        self.log("Val/acc_bin", self.val_acc_bin.compute(), prog_bar=True)
+        self.log("Val/f1_bin", self.val_f1_bin.compute(), prog_bar=True)
+        self.log("Val/auc_bin", self.val_auc_bin.compute(), prog_bar=True)
+
+        # Log multilabel metrics
+        self.log("Val/acc_multi", self.val_acc_multi.compute(), prog_bar=True)
+        self.log("Val/cf1_multi", self.val_cf1_multi.compute(), prog_bar=True)
+        self.log("Val/of1_multi", self.val_of1_multi.compute(), prog_bar=True)
+        self.log("Val/mAP_multi", self.val_map_multi.compute(), prog_bar=True)
+
+        # Reset all metrics
+        self.val_acc_bin.reset()
+        self.val_f1_bin.reset()
+        self.val_auc_bin.reset()
+        self.val_acc_multi.reset()
+        self.val_cf1_multi.reset()
+        self.val_of1_multi.reset()
+        self.val_map_multi.reset()
