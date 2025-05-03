@@ -58,7 +58,7 @@ class Model(L.LightningModule):
     
     def forward(self, img, txt):
         (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
-        loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), copy.deepcopy(self.feature_extraction.parameters()))
+        loss = contrastive_loss + self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
         loss /= 2
 
         z = z_t
