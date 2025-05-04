@@ -83,7 +83,7 @@ class DatasetLoader:
                 for m in manip:
                     multi[poss[m]] = 1.0
             multi_labels.append(torch.tensor(multi).unsqueeze(0))
-            path_img = f"./data{b['orig_image']}"
+            path_img = f"./data/DGM4/origin{b['orig_image']}"
             original_images.append(Image.open(path_img).convert('RGB'))
             original_txts.append(b['orig_text'])
 
