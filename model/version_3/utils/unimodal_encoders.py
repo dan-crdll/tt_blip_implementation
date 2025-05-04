@@ -34,6 +34,8 @@ class TextEncoder(nn.Module):
         self.n_layers = n_layers
         self.projector = nn.Linear(768, 384)
 
+        self.device = device
+
         # for param in self.encoder.parameters():
         #    param.requires_grad = False
         # # for idx, block in enumerate(self.encoder.albert.encoder):

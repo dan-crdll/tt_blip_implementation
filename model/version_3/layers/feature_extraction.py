@@ -13,7 +13,6 @@ class ImageFeatureExtraction(nn.Module):
 
     def forward(self, x):
         z_vit = self.vit(x)
-        z_vit = self.projector(z_vit)
 
         z_blip, _ = self.blip(image=x, text=["altered image" for _ in range(z_vit.shape[0])])
 

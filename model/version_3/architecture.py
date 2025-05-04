@@ -37,12 +37,12 @@ class Model(L.LightningModule):
 
         # -- Loss Functions --
         self.loss_fn = nn.BCEWithLogitsLoss()
-        self.moco_loss = MocoLoss(
-            copy.deepcopy(self.feature_extraction),
-            momentum=momentum,
-            queue_size=queue_size,
-            temp=temp
-        )
+        # self.moco_loss = MocoLoss(
+        #     copy.deepcopy(self.feature_extraction),
+        #     momentum=momentum,
+        #     queue_size=queue_size,
+        #     temp=temp
+        # )
 
         # -- Log Variance for Uncertainty Weighting --
         self.log_var = nn.Parameter(torch.zeros(2))
@@ -115,7 +115,7 @@ class Model(L.LightningModule):
             self.first_binary = bin_loss.detach()
         bin_loss /= self.first_binary
 
-        mask = (torch.sigmoid(pred_bin) < 0.5)
+        mask = (y_bin == 0)
         pred_multi = pred[:, 1:]
 
         if mask.sum() > 0:
