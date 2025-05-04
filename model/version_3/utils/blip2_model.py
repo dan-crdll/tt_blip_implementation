@@ -38,7 +38,7 @@ class Blip2Model(nn.Module):
             text = [""] * batch_size
 
         # Preprocess
-        processed = self.processor(text=text, images=image, return_tensors='pt', padding=True)
+        processed = self.processor(text=text, images=image, return_tensors='pt', padding=True, truncation=True)
 
         x_img = processed['pixel_values'].to(self.device)
         x_txt = processed['input_ids'].to(self.device)
