@@ -21,7 +21,7 @@ class ImageFeatureExtraction(nn.Module):
         tokens = torch.cat([z_vit[:, 1:], z_blip[:, 1:]], dim=1)
 
         z = torch.cat([cls, tokens], dim=1)
-        return z, (z_vit[:, 0], z_blip[:, 0])
+        return z, (z_vit, z_blip[:, 0])
 
 
 class TextFeatureExtraction(nn.Module):
@@ -37,7 +37,7 @@ class TextFeatureExtraction(nn.Module):
         cls = ((z_text[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
         tokens = torch.cat([z_text[:, 1:], z_blip[:, 1:]], dim=1)
         z = torch.cat([cls, tokens], dim=1)
-        return z, (z_text[:, 0], z_blip[:, 0])
+        return z, (z_text, z_blip[:, 0])
     
 
 class FeatureExtraction(nn.Module):
@@ -55,8 +55,8 @@ class FeatureExtraction(nn.Module):
         )
 
     def forward(self, img, txt):
-        z_i, (cls_vit, cls_blip_i) = self.feature_extractor_img(img)
-        z_t, (cls_bert, cls_blip_t) = self.feature_extractor_txt(txt)
+        z_i, (z_vit, cls_blip_i) = self.feature_extractor_img(img)
+        z_t, (z_bert, cls_blip_t) = self.feature_extractor_txt(txt)
 
         l_itm = self.itm_loss(
             z_i[:, 0], 
@@ -67,4 +67,4 @@ class FeatureExtraction(nn.Module):
             self.feature_extractor_txt.text_encoder.parameters()
         )
 
-        return (z_i, z_t), l_itm
+        return (z_i, z_t), (z_vit, z_bert), l_itm

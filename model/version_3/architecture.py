@@ -69,14 +69,14 @@ class Model(L.LightningModule):
 
     def forward(self, img, txt):
         # Unimodal features and contrastive loss
-        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
+        (z_i, z_t), (z_vit, z_bert), contrastive_loss = self.feature_extraction(img, txt)
 
         # Multimodal features and auxiliary moco loss
         z_im, z_tx = self.multimodal_feature_extraction(img, txt)
         z_tm = torch.cat([z_im, z_tx], dim=1)
 
-        clip_distance_t = self.dist_loss(z_t, z_tx)
-        clip_distance_i = self.dist_loss(z_i, z_im)
+        clip_distance_t = self.dist_loss(z_bert, z_tx)
+        clip_distance_i = self.dist_loss(z_vit, z_im)
         clip_distance = (clip_distance_t + clip_distance_i) / 2.0
 
         loss = contrastive_loss + 0.3 * clip_distance
