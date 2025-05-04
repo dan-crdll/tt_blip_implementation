@@ -56,6 +56,18 @@ class ITMLoss(nn.Module):
 
         self.infonce_loss = InfoNCE(temp=temp, embed_dim=embed_dim)
 
+
+    def remove_similar_embeddings(self, current, original, threshold=0.99):
+            # similarità coseno: shape [N, M]
+            sim_matrix = torch.matmul(current, original.T)
+
+            # massimo della similarità per ogni embedding in `current`
+            max_similarities, _ = sim_matrix.max(dim=1)
+
+            # mantieni solo quelli con similarità < threshold
+            mask = max_similarities < threshold
+            return current[mask]
+
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys_i: torch.Tensor, keys_t: torch.Tensor):
         """
@@ -82,22 +94,38 @@ class ITMLoss(nn.Module):
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
 
-        mask_i_orig = (z_i_m_orig == z_i_m)
-        mask_t_orig = (z_t_m_orig == z_t_m)
+        def is_duplicate(vec, refs, tol=1e-6):
+            return any(torch.allclose(vec, ref, atol=tol) for ref in refs)
+        
+        unique_i_indices = [
+            i for i in range(z_i_m.shape[0])
+            if not is_duplicate(z_i_m[i], z_i_m_orig)
+        ]
 
-        mask_i_keep = ~mask_i_orig
-        mask_t_keep = ~mask_t_orig
+        unique_t_indices = [
+            i for i in range(z_t_m.shape[0])
+            if not is_duplicate(z_t_m[i], z_t_m_orig)
+        ]
 
-
-        all_i = torch.cat([z_i_m_orig, z_i_m[mask_i_keep], queue_i], dim=0)
-        all_t = torch.cat([z_t_m_orig, z_t_m[mask_t_keep], queue_t], dim=0)
+        all_i = torch.cat(
+            [z_i_m_orig,
+            z_i_m[unique_i_indices],
+            queue_i],
+            dim=0
+        )
+        all_t = torch.cat(
+            [z_t_m_orig,
+            z_t_m[unique_t_indices],
+            queue_t],
+            dim=0
+        )
 
         l_i2t = self.infonce_loss(img_cls, all_t)
         l_t2i = self.infonce_loss(txt_cls, all_i)
         l_i2i = self.infonce_loss(img_cls, all_i)
         l_t2t = self.infonce_loss(txt_cls, all_t)
         l_itm = (l_i2t + l_t2i + l_i2i + l_t2t) / 4
-        
+
         # Update the queue
         self._dequeue_and_enqueue(z_i_m, z_t_m)
 
