@@ -6,7 +6,7 @@ import numpy as np
 import lightning as L
 
 class Blip2Model(nn.Module):
-    def __init__(self, hf_repo, device='cuda', frozen=False):
+    def __init__(self, hf_repo, device='cuda', frozen=True):
         super().__init__()
         # Set device automatically if not specified
         if device is None:
@@ -20,6 +20,12 @@ class Blip2Model(nn.Module):
         
         for param in self.model.parameters():
             param.requires_grad_(False)
+        self.eval()
+
+        if not frozen:
+            for param in self.model.encoder.layer[-1]:
+                param.requires_grad_(True)
+            self.train()
 
     def forward(self, image=None, text=None, use_autocast=True):
         # Determine batch size

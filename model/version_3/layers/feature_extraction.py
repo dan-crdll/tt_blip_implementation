@@ -10,7 +10,7 @@ class ImageFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
         self.vit = ViT("WinKawaks/vit-tiny-patch16-224", device, unfreeze_from_layer=9)
-        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device)
+        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device, frozen=False)
 
     def forward(self, x):
         z_vit = self.vit(x)
@@ -28,7 +28,7 @@ class TextFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
         self.text_encoder = TextEncoder("albert/albert-base-v2", device=device, unfreeze_from_layer=3)
-        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device)
+        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device, frozen=False)
 
     def forward(self, x):
         z_text = self.text_encoder(x)
