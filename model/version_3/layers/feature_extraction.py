@@ -17,10 +17,8 @@ class ImageFeatureExtraction(nn.Module):
 
         z_blip = self.blip(image=x)
 
-        cls = ((z_vit[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
-        tokens = torch.cat([z_vit[:, 1:], z_blip[:, 1:]], dim=1)
+        z = torch.cat([z_vit[:], z_blip[:, 1:]], dim=1)
 
-        z = torch.cat([cls, tokens], dim=1)
         return z, (z_vit, z_blip[:, 0])
 
 
@@ -34,9 +32,7 @@ class TextFeatureExtraction(nn.Module):
         z_text = self.text_encoder(x)
         z_blip = self.blip(text=x)
 
-        cls = ((z_text[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
-        tokens = torch.cat([z_text[:, 1:], z_blip[:, 1:]], dim=1)
-        z = torch.cat([cls, tokens], dim=1)
+        z = torch.cat([z_text[:], z_blip[:, 1:]], dim=1)
         return z, (z_text, z_blip[:, 0])
     
 
