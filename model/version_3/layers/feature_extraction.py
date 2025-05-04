@@ -54,7 +54,7 @@ class FeatureExtraction(nn.Module):
             text_encoder=copy.deepcopy(self.feature_extractor_txt.text_encoder)
         )
 
-    def forward(self, img, txt, orig):
+    def forward(self, img, txt, orig, labels):
         z_i, (z_vit, cls_blip_i) = self.feature_extractor_img(img)
         z_t, (z_bert, cls_blip_t) = self.feature_extractor_txt(txt)
 
@@ -65,7 +65,8 @@ class FeatureExtraction(nn.Module):
             txt, 
             self.feature_extractor_img.vit.parameters(), 
             self.feature_extractor_txt.text_encoder.parameters(),
-            orig
+            orig, 
+            labels
         )
 
         return (z_i, z_t), (z_vit, z_bert), l_itm

@@ -57,17 +57,6 @@ class ITMLoss(nn.Module):
         self.infonce_loss = InfoNCE(temp=temp, embed_dim=embed_dim)
 
 
-    def remove_similar_embeddings(self, current, original, threshold=0.99):
-            # similarità coseno: shape [N, M]
-            sim_matrix = torch.matmul(current, original.T)
-
-            # massimo della similarità per ogni embedding in `current`
-            max_similarities, _ = sim_matrix.max(dim=1)
-
-            # mantieni solo quelli con similarità < threshold
-            mask = max_similarities < threshold
-            return current[mask]
-
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys_i: torch.Tensor, keys_t: torch.Tensor):
         """
@@ -82,7 +71,7 @@ class ITMLoss(nn.Module):
         ptr = (ptr + batch_size) % self.queue_size
         self.queue_ptr[0] = ptr
 
-    def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig):
+    def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig, labels):
         orig_img, orig_txt = orig
         with torch.no_grad():
             z_i_m = self.image_encoder(img)[:, 0].detach()
@@ -94,41 +83,21 @@ class ITMLoss(nn.Module):
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
 
-        def is_duplicate(vec, refs, tol=1e-6):
-            if len(refs) == 0:
-                return False
-            diffs = torch.stack(refs) - vec
-            return torch.any(torch.all(torch.abs(diffs) <= tol, dim=1)).item()
-        
-        unique_i_indices = [
-            i for i in range(z_i_m.shape[0])
-            if not is_duplicate(z_i_m[i], z_i_m_orig)
-        ]
+        fake_images = (labels[:, 0] + labels[:, 1] > 0)
+        fake_texts = (labels[:, 2] + labels[:, 3] > 0) 
 
-        unique_t_indices = [
-            i for i in range(z_t_m.shape[0])
-            if not is_duplicate(z_t_m[i], z_t_m_orig)
-        ]
+        fake_images = torch.argwhere(fake_images)
+        fake_texts = torch.argwhere(fake_texts)
 
-        all_i = torch.cat(
-            [z_i_m_orig,
-            z_i_m[unique_i_indices],
-            queue_i],
-            dim=0
-        )
-        all_t = torch.cat(
-            [z_t_m_orig,
-            z_t_m[unique_t_indices],
-            queue_t],
-            dim=0
-        )
+        all_i = torch.cat([z_i_m_orig, z_i_m[fake_images], queue_i], dim=0)
+        all_t = torch.cat([z_t_m_orig, z_t_m[fake_texts], queue_t], dim=0)
 
         l_i2t = self.infonce_loss(img_cls, all_t)
         l_t2i = self.infonce_loss(txt_cls, all_i)
         l_i2i = self.infonce_loss(img_cls, all_i)
         l_t2t = self.infonce_loss(txt_cls, all_t)
         l_itm = (l_i2t + l_t2i + l_i2i + l_t2t) / 4
-
+        
         # Update the queue
         self._dequeue_and_enqueue(z_i_m, z_t_m)
 

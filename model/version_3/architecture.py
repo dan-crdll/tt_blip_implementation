@@ -67,9 +67,9 @@ class Model(L.LightningModule):
 
         return optimizer
 
-    def forward(self, img, txt, orig):
+    def forward(self, img, txt, orig, labels):
         # Unimodal features and contrastive loss
-        (z_i, z_t), (z_vit, z_bert), contrastive_loss = self.feature_extraction(img, txt, orig)
+        (z_i, z_t), (z_vit, z_bert), contrastive_loss = self.feature_extraction(img, txt, orig, labels)
 
         # Multimodal features and auxiliary moco loss
         z_tm = self.multimodal_feature_extraction(img, txt)
@@ -95,7 +95,7 @@ class Model(L.LightningModule):
 
     def _step(self, split, batch):
         img, txt, (y_bin, y_multi), orig = batch
-        pred, c_loss = self(img, txt, orig)
+        pred, c_loss = self(img, txt, orig, y_multi)
 
         pred_bin = pred[:, 0]
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
