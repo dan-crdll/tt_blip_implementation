@@ -1,74 +1,67 @@
-import torch 
-from nltk.corpus import stopwords
-import nltk
-import sys
-sys.path.append('.')
+import torch
 from torch.utils.data import DataLoader
 from model.utils.data_preprocessor import DataPreprocessor
 from PIL import Image
 from datasets import load_dataset
 
-
-
 class DatasetLoader:
-    def __init__(self, allowed_splits=['washington_post', 'bbc', 'guardian', 'usa_today', 'simswap', 'StyleCLIP', 'HFGI', 'infoswap'], batch_size=8):
+    def __init__(
+        self,
+        allowed_splits=['washington_post', 'bbc', 'guardian', 'usa_today', 'simswap', 'StyleCLIP', 'HFGI', 'infoswap'],
+        batch_size=8
+    ):
         self.dp = DataPreprocessor()
-        self.allowed_splits = allowed_splits
-        self.train_dataset, self.test_dataset = self.create_datasets()
+        self.allowed_splits = set(allowed_splits)
         self.batch_size = batch_size
 
+        # Load datasets once
         self.real_pairs_ds = load_dataset("twelcone/VisualNews")
+        self.real_pairs_lookup = self._build_real_pairs_dict()
 
-    def find_real_pairs(self, id):
-        real_pairs_ds_train = self.real_pairs_ds['train']
-        real_pairs_ds_val = self.real_pairs_ds['validation']
-        real_pairs_ds_test = self.real_pairs_ds['test']
+        self.dgm4_train = load_dataset("rshaojimmy/DGM4", split='train')
+        self.dgm4_val = load_dataset("rshaojimmy/DGM4", split='validation')
 
-        for split in [real_pairs_ds_train, real_pairs_ds_test, real_pairs_ds_val]:
-            filtered = split.filter(lambda e : e['id'] == id)
+        self.train_dataset = self._create_dataset(self.dgm4_train)
+        self.test_dataset = self._create_dataset(self.dgm4_val, is_val=True)
 
-            if filtered.num_rows > 0:
-                orig_txt = filtered[0]['caption']
-                orig_img = filtered[0]['image_path']
-                return orig_img, orig_txt
-                
+    def _build_real_pairs_dict(self):
+        # Build a fast lookup dictionary for id -> (img, txt)
+        lookup = {}
+        for split_name in ['train', 'validation', 'test']:
+            split = self.real_pairs_ds[split_name]
+            for item in split:
+                lookup[int(item['id'])] = (item['image_path'], item['caption'])
+        return lookup
 
-    def create_datasets(self):
-        train_dataset = []
-        test_dataset = []
-        ds = load_dataset("rshaojimmy/DGM4", split='train')
+    def _create_dataset(self, ds, is_val=False):
+        # Vectorize filtering
+        ds = ds.filter(lambda e: e['image'].split('/')[2] in self.allowed_splits, num_proc=4)
 
+        # Efficiently create the dataset list with a list comprehension
+        data_list = []
         for el in ds:
-            if (el['image'].split('/')[2] in self.allowed_splits):
-                orig_img, orig_txt = self.find_real_pairs(int(el['id']))
-                train_dataset.append({
-                    'text': el['text'],
-                    'image': el['image'],
-                    'fake_cls': el['fake_cls'],
-                    'orig_image': orig_img,
-                    'orig_text': orig_txt,
-                })
-            
-        ds = load_dataset("rshaojimmy/DGM4", split='validation')
-
-        for el in ds:
-            if (el['image'].split('/')[2] in self.allowed_splits):
-                orig_img, orig_txt = self.find_real_pairs(int(el['id']))
-                test_dataset.append({
-                    'text': el['text'],
-                    'image': el['image'],
-                    'fake_cls': el['fake_cls'],
-                    'orig_image': orig_img.replace('.', ''),
-                    'orig_text': orig_txt,
-                })
-        return train_dataset, test_dataset
+            id_int = int(el['id'])
+            if id_int not in self.real_pairs_lookup:
+                continue
+            orig_img, orig_txt = self.real_pairs_lookup[id_int]
+            if is_val:
+                # Emulate your old `replace('.', '')`
+                orig_img = orig_img.replace('.', '')
+            item = {
+                'text': el['text'],
+                'image': el['image'],
+                'fake_cls': el['fake_cls'],
+                'orig_image': orig_img,
+                'orig_text': orig_txt,
+            }
+            data_list.append(item)
+        return data_list
 
     def collate_fn(self, batch):
         images = []
         texts = []
         labels = []
         multi_labels = []
-
         original_images = []
         original_txts = []
 
@@ -78,13 +71,11 @@ class DatasetLoader:
             'text_attribute': 2,
             'text_swap': 3,
         }
-
         for b in batch:
             multi = [0, 0, 0, 0]
             path_img = f"./data/{b['image']}"
             images.append(Image.open(path_img).convert('RGB'))
             texts.append(b['text'])
-            
             if b['fake_cls'] == 'orig':
                 labels.append(1)
             else:
@@ -93,7 +84,6 @@ class DatasetLoader:
                 for m in manip:
                     multi[poss[m]] = 1.0
             multi_labels.append(torch.tensor(multi).unsqueeze(0))
-
             path_img = f"./data{b['orig_image']}"
             original_images.append(Image.open(path_img).convert('RGB'))
             original_txts.append(b['orig_text'])
