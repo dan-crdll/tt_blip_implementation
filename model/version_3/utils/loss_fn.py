@@ -97,3 +97,14 @@ class ITMLoss(nn.Module):
             param.data = param.data * self.momentum + txt_params[idx].data * (1.0 - self.momentum)
 
         return l_itm
+
+class DistanceLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, x1, x2):
+        x1 = self.avg_pool(x1.permute(0, 2, 1)).squeeze(-1)
+        x2 = self.avg_pool(x2.permute(0, 2, 1)).squeeze(-1)
+        loss = 1 - F.cosine_similarity(x1, x2).mean()
+        return loss

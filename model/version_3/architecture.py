@@ -7,7 +7,7 @@ import copy
 
 from torchmetrics import Accuracy, F1Score, Precision, Recall
 from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, MultilabelAveragePrecision
-
+from model.version_3.utils.loss_fn import DistanceLoss
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from model.version_3.utils.blip2_model import Blip2Model
@@ -45,6 +45,7 @@ class Model(L.LightningModule):
 
         # -- Log Variance for Uncertainty Weighting --
         self.log_var = nn.Parameter(torch.zeros(2))
+        self.dist_loss = DistanceLoss()
 
         # -- Metrics (Validation Only) --
         self._init_metrics()
@@ -74,8 +75,8 @@ class Model(L.LightningModule):
         z_im, z_tx = self.multimodal_feature_extraction(img, txt)
         z_tm = torch.cat([z_im, z_tx], dim=1)
 
-        clip_distance_t = 1 - F.cosine_similarity(z_t[:, 0], z_tx[:, 0]).mean()
-        clip_distance_i = 1 - F.cosine_similarity(z_i[:, 0], z_im[:, 0]).mean()
+        clip_distance_t = self.dist_loss(z_t, z_tx)
+        clip_distance_i = self.dist_loss(z_i, z_im)
         clip_distance = (clip_distance_t + clip_distance_i) / 2.0
 
         loss = contrastive_loss + 0.3 * clip_distance
