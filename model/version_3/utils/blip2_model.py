@@ -23,7 +23,7 @@ class Blip2Model(nn.Module):
         self.eval()
 
         if not frozen:
-            for param in self.model.encoder.layer[-1]:
+            for param in self.model.encoder.layer[-1].parameters():
                 param.requires_grad_(True)
             self.train()
 
