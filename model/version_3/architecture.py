@@ -20,7 +20,7 @@ class Model(L.LightningModule):
 
         # -- Feature Extraction Modules --
         self.feature_extraction = FeatureExtraction('cuda', temp)
-        self.multimodal_feature_extraction = Blip2Model("Salesforce/blip2-itm-vit-g")
+        self.multimodal_feature_extraction = Blip2Model("openai/clip-vit-base-patch32")
 
         # -- Cross-Attention Fusion Layers --
         self.fusion_layer = nn.ModuleList([
@@ -76,13 +76,17 @@ class Model(L.LightningModule):
     def forward(self, img, txt):
         # Unimodal features and contrastive loss
         (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
-        moco = self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
-        loss = (contrastive_loss + moco) / 2
+
+        # moco = self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
+
+        # loss = (contrastive_loss + moco) / 2
+        loss = contrastive_loss
 
         # Multimodal features and auxiliary moco loss
-        z_tm = self.multimodal_feature_extraction(img, txt)
-        aux_moco = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
-        loss = (loss + aux_moco) / 2
+        z_im, z_tx = self.multimodal_feature_extraction(img, txt)
+        z_tm = torch.cat([z_im, z_tx], dim=1)
+        # aux_moco = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
+        # loss = (loss + aux_moco) / 2
 
         # Fusion via attention blocks
         z = z_t
