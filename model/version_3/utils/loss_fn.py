@@ -30,21 +30,23 @@ class InfoNCE(nn.Module):
         targets = torch.arange(emb_a.size(0), device=emb_a.device)
         return F.cross_entropy(logits, targets)
 
-class MocoLoss(nn.Module):
-    """
-    Momentum Contrast (MoCo) loss with a fixed-size queue for negatives.
-    """
 
-    def __init__(self, momentum_encoder: nn.Module, momentum: float, queue_size: int, temp=1.0, embed_dim=384):
+class ITMLoss(nn.Module):
+    def __init__(self, temp, momentum, image_encoder, text_encoder, queue_size=4096, embed_dim=384):
         super().__init__()
-        self.momentum_encoder = momentum_encoder
-        self.momentum = momentum
-        self.queue_size = queue_size
 
-        # Freeze momentum encoder
-        for param in self.momentum_encoder.parameters():
-            param.requires_grad = False
-        self.momentum_encoder.eval()
+        self.image_encoder = image_encoder
+        self.text_encoder = text_encoder
+
+        for params in self.image_encoder.parameters():
+            params.requires_grad = False
+        for params in self.text_encoder.parameters():
+            params.requires_grad = False
+        self.image_encoder.eval()
+        self.text_encoder.eval()
+
+        self.momentum = momentum
+        self.temp = temp
 
         # Buffers to hold the queue of negatives
         self.register_buffer("queue_i", torch.zeros(queue_size, embed_dim))
@@ -67,54 +69,30 @@ class MocoLoss(nn.Module):
         ptr = (ptr + batch_size) % self.queue_size
         self.queue_ptr[0] = ptr
 
-    @torch.no_grad()
-    def update_momentum_encoder(self, model_parameters):
-        """
-        Update momentum encoder parameters using exponential moving average (EMA).
-        """
-        for m_param, param in zip(self.momentum_encoder.parameters(), model_parameters):
-            m_param.data = m_param.data * self.momentum + param.data * (1.0 - self.momentum)
-
-    def forward(self, pred, batch, model_parameters, single_approach=False):
-        """
-        Computes the MoCo loss.
-        Args:
-            pred: tuple of (p_i, p_t) from online encoder
-            batch: tuple of (text, image)
-            model_parameters: parameters of the online encoder
-            single_approach: whether to use only (p_i vs t) and (p_i vs i)
-        Returns:
-            Scalar MoCo loss
-        """
-        text, image = batch
-        BSZ = len(image)
-        p_i, p_t = pred  # online encoder output
-
-        device = p_i.device
-
+    def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params):
         with torch.no_grad():
-            (z_i, z_t), *_ = self.momentum_encoder(text, image)
-            keys_i = z_i[:, 0].detach()
-            keys_t = z_t[:, 0].detach()
+            z_i_m = self.image_encoder(img)[:, 0].detach()
+            z_t_m = self.text_encoder(txt)[:, 0].detach()
 
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
 
-        # Contrastive targets: online predictions vs all momentum (queue + batch)
-        all_i = torch.cat([keys_i, queue_i], dim=0)
-        all_t = torch.cat([keys_t, queue_t], dim=0)
+        all_i = torch.cat([z_i_m, queue_i], dim=1)
+        all_t = torch.cat([z_t_m, queue_t], dim=1)
 
-        loss = self.infonce_loss(p_i, all_t) + self.infonce_loss(p_i, all_i)
+        l_i2t = self.infonce_loss(img_cls, all_t)
+        l_t2i = self.infonce_loss(txt_cls, all_i)
+        l_itm = (l_i2t + l_t2i) / 2
+        
+        # Update the queue
+        self._dequeue_and_enqueue(z_i_m, z_t_m)
 
-        if not single_approach:
-            loss += self.infonce_loss(p_t, all_i)
-            loss += self.infonce_loss(p_t, all_t)
-            loss /= 4
-        else:
-            loss /= 2
+        # Momentum encoder update
+        img_params = list(img_encoder_params)
+        txt_params = list(text_encoder_params)
+        for idx, param in enumerate(self.image_encoder.parameters()):
+            param.data = param.data * self.momentum + img_params[idx].data * (1.0 - self.momentum)
+        for idx, param in enumerate(self.text_encoder.parameters()):
+            param.data = param.data * self.momentum + txt_params[idx].data * (1.0 - self.momentum)
 
-        if not single_approach:
-            self._dequeue_and_enqueue(keys_i, keys_t)
-            self.update_momentum_encoder(model_parameters)
-
-        return loss
+        return l_itm

@@ -77,16 +77,15 @@ class Model(L.LightningModule):
         # Unimodal features and contrastive loss
         (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt)
 
-        # moco = self.moco_loss((z_i[:, 0], z_t[:, 0]), (img, txt), self.feature_extraction.parameters())
-
-        # loss = (contrastive_loss + moco) / 2
-        loss = contrastive_loss
-
         # Multimodal features and auxiliary moco loss
         z_im, z_tx = self.multimodal_feature_extraction(img, txt)
         z_tm = torch.cat([z_im, z_tx], dim=1)
-        # aux_moco = self.moco_loss((z_tm[:, 0], None), (img, txt), self.feature_extraction.parameters(), single_approach=True)
-        # loss = (loss + aux_moco) / 2
+
+        clip_distance_t = 1 - F.cosine_similarity(z_t[:, 0], z_tx[:, 0]).mean()
+        clip_distance_i = 1 - F.cosine_similarity(z_i[:, 0], z_im[:, 0]).mean()
+        clip_distance = (clip_distance_t + clip_distance_i) / 2.0
+
+        loss = contrastive_loss + 0.3 * clip_distance
 
         # Fusion via attention blocks
         z = z_t
@@ -99,7 +98,10 @@ class Model(L.LightningModule):
         return y, loss
 
     def total_loss(self, contrastive, classification):
-        return contrastive + 2 * classification
+        if self.current_epoch < 5.0:
+            return 0.6 * contrastive + 0.4 * classification
+        else:
+            return 0.3 * contrastive + 0.7 * classification
 
     def _step(self, split, batch):
         img, txt, (y_bin, y_multi) = batch
@@ -124,15 +126,16 @@ class Model(L.LightningModule):
                 self.first_multilabel = multi_loss.detach()
                 self.init = False
             multi_loss /= self.first_multilabel
-            cls_loss = bin_loss + multi_loss
+            cls_loss = (bin_loss + multi_loss) / 2.0
         else:
-            cls_loss = bin_loss
+            cls_loss = bin_loss 
 
         loss = self.total_loss(c_loss, cls_loss)
 
         # Logging losses
         self.log(f"{split}/loss", loss, on_step=True if split == "Train" else False, on_epoch=True, prog_bar=True)
         self.log(f"{split}/loss_bin", bin_loss, on_step=False, on_epoch=True)
+        self.log(f"{split}/loss_multi", multi_loss, on_step=False, on_epoch=True)
         self.log(f"{split}/contrastive_loss", c_loss, on_step=False, on_epoch=True)
 
         # Validation metrics
@@ -155,7 +158,6 @@ class Model(L.LightningModule):
         return self._step("Train", batch)
     
     def on_train_epoch_end(self):
-        self.training_step_outputs.clear()
         torch.cuda.empty_cache()
 
     def validation_step(self, batch, batch_idx):

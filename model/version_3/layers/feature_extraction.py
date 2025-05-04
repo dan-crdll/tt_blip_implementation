@@ -1,8 +1,9 @@
 from model.version_3.utils.blip2_model import Blip2Model
 from model.version_3.utils.unimodal_encoders import ViT, TextEncoder
-from model.version_3.utils.loss_fn import InfoNCE
+from model.version_3.utils.loss_fn import ITMLoss
 import torch 
 from torch import nn 
+import copy
 
 
 class ImageFeatureExtraction(nn.Module):
@@ -46,13 +47,24 @@ class FeatureExtraction(nn.Module):
         self.feature_extractor_img = ImageFeatureExtraction(device) 
         self.feature_extractor_txt = TextFeatureExtraction(device)
 
-        self.infonce_loss = InfoNCE(temp=temp)
+        self.itm_loss = ITMLoss(
+            temp=temp, 
+            momentum=0.999, 
+            image_encoder=copy.deepcopy(self.feature_extractor_img.vit),
+            text_encoder=copy.deepcopy(self.feature_extractor_txt.text_encoder)
+        )
 
     def forward(self, img, txt):
         z_i, (cls_vit, cls_blip_i) = self.feature_extractor_img(img)
         z_t, (cls_bert, cls_blip_t) = self.feature_extractor_txt(txt)
 
-        l_i2t = self.infonce_loss(cls_blip_i, cls_bert)
-        l_t2i = self.infonce_loss(cls_blip_t, cls_vit)
+        l_itm = self.itm_loss(
+            z_i[:, 0], 
+            z_t[:, 0], 
+            img, 
+            txt, 
+            self.feature_extractor_img.vit.parameters(), 
+            self.feature_extractor_txt.text_encoder.parameters()
+        )
 
-        return (z_i, z_t), (l_i2t + l_t2i) / 2.0
+        return (z_i, z_t), l_itm
