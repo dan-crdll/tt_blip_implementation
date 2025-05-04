@@ -19,7 +19,7 @@ class Model(L.LightningModule):
 
         # -- Feature Extraction Modules --
         self.feature_extraction = FeatureExtraction('cuda', temp)
-        self.multimodal_feature_extraction = Blip2Model("openai/clip-vit-base-patch32")
+        self.multimodal_feature_extraction = Blip2Model("dandelin/vilt-b32-mlm")
 
         # -- Cross-Attention Fusion Layers --
         self.fusion_layer = nn.ModuleList([
@@ -67,16 +67,15 @@ class Model(L.LightningModule):
 
         return optimizer
 
-    def forward(self, img, txt):
+    def forward(self, img, txt, orig):
         # Unimodal features and contrastive loss
-        (z_i, z_t), (z_vit, z_bert), contrastive_loss = self.feature_extraction(img, txt)
+        (z_i, z_t), (z_vit, z_bert), contrastive_loss = self.feature_extraction(img, txt, orig)
 
         # Multimodal features and auxiliary moco loss
-        z_im, z_tx = self.multimodal_feature_extraction(img, txt)
-        z_tm = torch.cat([z_im, z_tx], dim=1)
+        z_tm = self.multimodal_feature_extraction(img, txt)
 
-        clip_distance_t = self.dist_loss(z_bert, z_tx)
-        clip_distance_i = self.dist_loss(z_vit, z_im)
+        clip_distance_t = self.dist_loss(z_bert, z_tm)
+        clip_distance_i = self.dist_loss(z_vit, z_tm)
         clip_distance = (clip_distance_t + clip_distance_i) / 2.0
 
         loss = contrastive_loss + 0.3 * clip_distance
@@ -92,14 +91,11 @@ class Model(L.LightningModule):
         return y, loss
 
     def total_loss(self, contrastive, classification):
-        if self.current_epoch < 5.0:
-            return 0.6 * contrastive / 3 + 0.4 * classification
-        else:
-            return 0.3 * contrastive / 3 + 0.7 * classification
+        return 0.3 * contrastive + 0.7 * classification
 
     def _step(self, split, batch):
-        img, txt, (y_bin, y_multi) = batch
-        pred, c_loss = self(img, txt)
+        img, txt, (y_bin, y_multi), orig = batch
+        pred, c_loss = self(img, txt, orig)
 
         pred_bin = pred[:, 0]
         bin_loss = self.loss_fn(pred_bin, y_bin.float())

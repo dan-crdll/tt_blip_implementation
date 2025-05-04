@@ -70,20 +70,33 @@ class ITMLoss(nn.Module):
         ptr = (ptr + batch_size) % self.queue_size
         self.queue_ptr[0] = ptr
 
-    def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params):
+    def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig):
+        orig_img, orig_txt = orig
         with torch.no_grad():
             z_i_m = self.image_encoder(img)[:, 0].detach()
             z_t_m = self.text_encoder(txt)[:, 0].detach()
 
+            z_i_m_orig = self.image_encoder(orig_img)[:, 0].detach()
+            z_t_m_orig = self.text_encoder(orig_txt)[:, 0].detach()
+
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
 
-        all_i = torch.cat([z_i_m, queue_i], dim=0)
-        all_t = torch.cat([z_t_m, queue_t], dim=0)
+        mask_i_orig = (z_i_m_orig == z_i_m)
+        mask_t_orig = (z_t_m_orig == z_t_m)
+
+        mask_i_keep = ~mask_i_orig
+        mask_t_keep = ~mask_t_orig
+
+
+        all_i = torch.cat([z_i_m_orig, z_i_m[mask_i_keep], queue_i], dim=0)
+        all_t = torch.cat([z_t_m_orig, z_t_m[mask_t_keep], queue_t], dim=0)
 
         l_i2t = self.infonce_loss(img_cls, all_t)
         l_t2i = self.infonce_loss(txt_cls, all_i)
-        l_itm = (l_i2t + l_t2i) / 2
+        l_i2i = self.infonce_loss(img_cls, all_i)
+        l_t2t = self.infonce_loss(txt_cls, all_t)
+        l_itm = (l_i2t + l_t2i + l_i2i + l_t2t) / 4
         
         # Update the queue
         self._dequeue_and_enqueue(z_i_m, z_t_m)

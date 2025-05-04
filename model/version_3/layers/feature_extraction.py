@@ -10,12 +10,12 @@ class ImageFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
         self.vit = ViT("WinKawaks/vit-tiny-patch16-224", device, unfreeze_from_layer=9)
-        self.blip = Blip2Model("openai/clip-vit-base-patch32", device)
+        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device)
 
     def forward(self, x):
         z_vit = self.vit(x)
 
-        z_blip, _ = self.blip(image=x, text=["altered image" for _ in range(z_vit.shape[0])])
+        z_blip = self.blip(image=x)
 
         cls = ((z_vit[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
         tokens = torch.cat([z_vit[:, 1:], z_blip[:, 1:]], dim=1)
@@ -28,11 +28,11 @@ class TextFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
         self.text_encoder = TextEncoder("albert/albert-base-v2", device=device, unfreeze_from_layer=3)
-        self.blip = Blip2Model("openai/clip-vit-base-patch32", device)
+        self.blip = Blip2Model("dandelin/vilt-b32-mlm", device)
 
     def forward(self, x):
         z_text = self.text_encoder(x)
-        _, z_blip = self.blip(text=x)
+        z_blip = self.blip(text=x)
 
         cls = ((z_text[:, 0] + z_blip[:, 0]) / 2).unsqueeze(1)
         tokens = torch.cat([z_text[:, 1:], z_blip[:, 1:]], dim=1)
@@ -54,7 +54,7 @@ class FeatureExtraction(nn.Module):
             text_encoder=copy.deepcopy(self.feature_extractor_txt.text_encoder)
         )
 
-    def forward(self, img, txt):
+    def forward(self, img, txt, orig):
         z_i, (z_vit, cls_blip_i) = self.feature_extractor_img(img)
         z_t, (z_bert, cls_blip_t) = self.feature_extractor_txt(txt)
 
@@ -64,7 +64,8 @@ class FeatureExtraction(nn.Module):
             img, 
             txt, 
             self.feature_extractor_img.vit.parameters(), 
-            self.feature_extractor_txt.text_encoder.parameters()
+            self.feature_extractor_txt.text_encoder.parameters(),
+            orig
         )
 
         return (z_i, z_t), (z_vit, z_bert), l_itm

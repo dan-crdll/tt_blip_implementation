@@ -17,6 +17,22 @@ class DatasetLoader:
         self.train_dataset, self.test_dataset = self.create_datasets()
         self.batch_size = batch_size
 
+        self.real_pairs_ds = load_dataset("twelcone/VisualNews")
+
+    def find_real_pairs(self, id):
+        real_pairs_ds_train = self.real_pairs_ds['train']
+        real_pairs_ds_val = self.real_pairs_ds['validation']
+        real_pairs_ds_test = self.real_pairs_ds['test']
+
+        for split in [real_pairs_ds_train, real_pairs_ds_test, real_pairs_ds_val]:
+            filtered = split.filter(lambda e : e['id'] == id)
+
+            if filtered.num_rows > 0:
+                orig_txt = filtered[0]['caption']
+                orig_img = filtered[0]['image_path']
+                return orig_img, orig_txt
+                
+
     def create_datasets(self):
         train_dataset = []
         test_dataset = []
@@ -24,21 +40,26 @@ class DatasetLoader:
 
         for el in ds:
             if (el['image'].split('/')[2] in self.allowed_splits):
+                orig_img, orig_txt = self.find_real_pairs(int(el['id']))
                 train_dataset.append({
                     'text': el['text'],
                     'image': el['image'],
-                    'fake_cls': el['fake_cls']
+                    'fake_cls': el['fake_cls'],
+                    'orig_image': orig_img,
+                    'orig_text': orig_txt,
                 })
             
         ds = load_dataset("rshaojimmy/DGM4", split='validation')
 
         for el in ds:
             if (el['image'].split('/')[2] in self.allowed_splits):
-                text_without_stopwords = ' '.join([word for word in el['text'].split() if word.lower() not in self.dp.stopwords])
+                orig_img, orig_txt = self.find_real_pairs(int(el['id']))
                 test_dataset.append({
-                    'text': text_without_stopwords,
+                    'text': el['text'],
                     'image': el['image'],
-                    'fake_cls': el['fake_cls']
+                    'fake_cls': el['fake_cls'],
+                    'orig_image': orig_img.replace('.', ''),
+                    'orig_text': orig_txt,
                 })
         return train_dataset, test_dataset
 
@@ -47,6 +68,9 @@ class DatasetLoader:
         texts = []
         labels = []
         multi_labels = []
+
+        original_images = []
+        original_txts = []
 
         poss = {
             'face_attribute': 0,
@@ -70,10 +94,14 @@ class DatasetLoader:
                     multi[poss[m]] = 1.0
             multi_labels.append(torch.tensor(multi).unsqueeze(0))
 
+            path_img = f"./data{b['orig_image']}"
+            original_images.append(Image.open(path_img).convert('RGB'))
+            original_txts.append(b['orig_text'])
+
         labels = torch.tensor(labels)
         multi_labels = torch.vstack(multi_labels)
         y = (labels.to(torch.float), multi_labels)
-        return images, texts, y
+        return images, texts, y, (original_images, original_txts)
 
     def get_dataloaders(self):
         train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
