@@ -45,7 +45,7 @@ class DatasetLoader:
                 continue
             orig_img, orig_txt = self.real_pairs_lookup[id_int]
             
-            orig_img = orig_img.replace('.', '')
+            orig_img = orig_img.replace('.', '', count=1)
             item = {
                 'text': el['text'],
                 'image': el['image'],
