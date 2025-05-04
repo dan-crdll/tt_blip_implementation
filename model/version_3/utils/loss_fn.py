@@ -95,7 +95,10 @@ class ITMLoss(nn.Module):
             queue_t = self.queue_t.detach()
 
         def is_duplicate(vec, refs, tol=1e-6):
-            return any(torch.allclose(vec, ref, atol=tol) for ref in refs)
+            if len(refs) == 0:
+                return False
+            diffs = torch.stack(refs) - vec
+            return torch.any(torch.all(torch.abs(diffs) <= tol, dim=1)).item()
         
         unique_i_indices = [
             i for i in range(z_i_m.shape[0])
