@@ -47,6 +47,7 @@ class ITMLoss(nn.Module):
 
         self.momentum = momentum
         self.temp = temp
+        self.queue_size = queue_size
 
         # Buffers to hold the queue of negatives
         self.register_buffer("queue_i", torch.zeros(queue_size, embed_dim))
@@ -77,8 +78,8 @@ class ITMLoss(nn.Module):
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
 
-        all_i = torch.cat([z_i_m, queue_i], dim=1)
-        all_t = torch.cat([z_t_m, queue_t], dim=1)
+        all_i = torch.cat([z_i_m, queue_i], dim=0)
+        all_t = torch.cat([z_t_m, queue_t], dim=0)
 
         l_i2t = self.infonce_loss(img_cls, all_t)
         l_t2i = self.infonce_loss(txt_cls, all_i)

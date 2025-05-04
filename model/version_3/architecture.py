@@ -11,7 +11,6 @@ from torchmetrics.classification import BinaryAUROC, MultilabelF1Score, Multilab
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from model.version_3.utils.blip2_model import Blip2Model
-from model.version_3.utils.loss_fn import MocoLoss
 
 
 class Model(L.LightningModule):
@@ -46,12 +45,6 @@ class Model(L.LightningModule):
 
         # -- Log Variance for Uncertainty Weighting --
         self.log_var = nn.Parameter(torch.zeros(2))
-
-        # -- Init Tracking for Normalizing Loss Weights --
-        self.init = True
-        self.first_contrastive = 1.0
-        self.first_binary = 1.0
-        self.first_multilabel = 1.0
 
         # -- Metrics (Validation Only) --
         self._init_metrics()
@@ -99,33 +92,22 @@ class Model(L.LightningModule):
 
     def total_loss(self, contrastive, classification):
         if self.current_epoch < 5.0:
-            return 0.6 * contrastive + 0.4 * classification
+            return 0.6 * contrastive / 3 + 0.4 * classification
         else:
-            return 0.3 * contrastive + 0.7 * classification
+            return 0.3 * contrastive / 3 + 0.7 * classification
 
     def _step(self, split, batch):
         img, txt, (y_bin, y_multi) = batch
         pred, c_loss = self(img, txt)
 
-        if self.init:
-            self.first_contrastive = c_loss.detach()
-        c_loss /= self.first_contrastive
-
         pred_bin = pred[:, 0]
         bin_loss = self.loss_fn(pred_bin, y_bin.float())
-        if self.init:
-            self.first_binary = bin_loss.detach()
-        bin_loss /= self.first_binary
 
         mask = (y_bin == 0)
         pred_multi = pred[:, 1:]
 
         if mask.sum() > 0:
             multi_loss = self.loss_fn(pred_multi[mask], y_multi[mask].float())
-            if self.init:
-                self.first_multilabel = multi_loss.detach()
-                self.init = False
-            multi_loss /= self.first_multilabel
             cls_loss = (bin_loss + multi_loss) / 2.0
         else:
             cls_loss = bin_loss 
