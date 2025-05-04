@@ -44,9 +44,8 @@ class DatasetLoader:
             if id_int not in self.real_pairs_lookup:
                 continue
             orig_img, orig_txt = self.real_pairs_lookup[id_int]
-            if is_val:
-                # Emulate your old `replace('.', '')`
-                orig_img = orig_img.replace('.', '')
+            
+            orig_img = orig_img.replace('.', '')
             item = {
                 'text': el['text'],
                 'image': el['image'],
