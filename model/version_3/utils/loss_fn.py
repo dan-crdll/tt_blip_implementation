@@ -52,7 +52,8 @@ class ITMLoss(nn.Module):
         # Buffers to hold the queue of negatives
         self.register_buffer("queue_i", torch.zeros(queue_size, embed_dim))
         self.register_buffer("queue_t", torch.zeros(queue_size, embed_dim))
-        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))  # circular buffer pointer
+        self.register_buffer("queue_ptr_i", torch.zeros(1, dtype=torch.long))  # circular buffer pointer
+        self.register_buffer("queue_ptr_t", torch.zeros(1, dtype=torch.long))  # circular buffer pointer
 
         self.infonce_loss = InfoNCE(temp=temp, embed_dim=embed_dim)
 
@@ -62,14 +63,18 @@ class ITMLoss(nn.Module):
         """
         Enqueue new keys and dequeue old ones in a circular fashion.
         """
-        batch_size = keys_i.size(0)
-        ptr = int(self.queue_ptr)
+        batch_size_i = keys_i.size(0)
+        ptr_i = int(self.queue_ptr_i)
+        batch_size_t = keys_t.size(0)
+        ptr_t = int(self.queue_ptr_t)
 
-        self.queue_i[ptr:ptr + batch_size] = keys_i
-        self.queue_t[ptr:ptr + batch_size] = keys_t
+        self.queue_i[ptr_i:ptr_i + batch_size_i] = keys_i
+        self.queue_t[ptr_t:ptr_t + batch_size_t] = keys_t
 
-        ptr = (ptr + batch_size) % self.queue_size
-        self.queue_ptr[0] = ptr
+        ptr_i = (ptr_i + batch_size_i) % self.queue_size
+        ptr_t = (ptr_t + batch_size_t) % self.queue_size
+        self.queue_ptr_i[0] = ptr_i
+        self.queue_ptr_t[0] = ptr_t
 
     def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig, labels):
         orig_img, orig_txt = orig
@@ -99,7 +104,7 @@ class ITMLoss(nn.Module):
         l_itm = (l_i2t + l_t2i + l_i2i + l_t2t) / 4
         
         # Update the queue
-        self._dequeue_and_enqueue(z_i_m, z_t_m)
+        self._dequeue_and_enqueue(z_i_m[fake_images], z_t_m[fake_texts])
 
         # Momentum encoder update
         img_params = list(img_encoder_params)
