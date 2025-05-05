@@ -37,7 +37,7 @@ class TextFeatureExtraction(nn.Module):
     
 
 class FeatureExtraction(nn.Module):
-    def __init__(self, device='cuda', temp=1.0):
+    def __init__(self, device='cuda', temp=1.0, queue_size=128, momentum=0.999):
         super().__init__()
 
         self.feature_extractor_img = ImageFeatureExtraction(device) 
@@ -45,9 +45,10 @@ class FeatureExtraction(nn.Module):
 
         self.itm_loss = ITMLoss(
             temp=temp, 
-            momentum=0.999, 
+            momentum=momentum, 
             image_encoder=copy.deepcopy(self.feature_extractor_img.vit),
-            text_encoder=copy.deepcopy(self.feature_extractor_txt.text_encoder)
+            text_encoder=copy.deepcopy(self.feature_extractor_txt.text_encoder),
+            queue_size=queue_size
         )
 
     def forward(self, img, txt, orig, labels):

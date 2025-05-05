@@ -14,11 +14,11 @@ from model.version_3.utils.blip2_model import Blip2Model
 
 
 class Model(L.LightningModule):
-    def __init__(self, embed_dim, num_heads, hidden_dim, temp=1.0, momentum=0.9, queue_size=32):
+    def __init__(self, embed_dim, num_heads, hidden_dim, temp=1.0, momentum=0.9, queue_size=32, lr=1e-5):
         super().__init__()
 
         # -- Feature Extraction Modules --
-        self.feature_extraction = FeatureExtraction('cuda', temp)
+        self.feature_extraction = FeatureExtraction('cuda', temp, queue_size, momentum)
         self.multimodal_feature_extraction = Blip2Model("dandelin/vilt-b32-mlm")
 
         # -- Cross-Attention Fusion Layers --
@@ -29,7 +29,11 @@ class Model(L.LightningModule):
 
         # -- Classification Head --
         self.classifier = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim),
+            nn.Linear(embed_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, embed_dim),
             nn.ReLU(),
             nn.Linear(embed_dim, 5)  # 1 binary + 4 multilabel outputs
         )
@@ -47,6 +51,8 @@ class Model(L.LightningModule):
         self.log_var = nn.Parameter(torch.zeros(2))
         self.dist_loss = DistanceLoss()
 
+        self.lr = lr
+
         # -- Metrics (Validation Only) --
         self._init_metrics()
 
@@ -63,9 +69,56 @@ class Model(L.LightningModule):
         self.val_map_multi = MultilabelAveragePrecision(num_labels=4)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4)
+        # Separazione dei parametri con e senza weight decay
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv2d)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
 
-        return optimizer
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters(recurse=False):
+                fpn = f"{mn}.{pn}" if mn else pn
+
+                if isinstance(m, whitelist_weight_modules):
+                    if pn.endswith("weight"):
+                        decay.add(fpn)
+                    else:
+                        no_decay.add(fpn)
+                elif isinstance(m, blacklist_weight_modules):
+                    no_decay.add(fpn)
+
+        # Rimuovi eventuali sovrapposizioni
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+
+        assert len(inter_params) == 0, f"Parameters in both decay and no_decay sets: {inter_params}"
+        assert len(param_dict.keys() - union_params) == 0, f"Parameters missing: {param_dict.keys() - union_params}"
+
+        optimizer_grouped_parameters = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": self.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0}
+        ]
+
+        optimizer = torch.optim.AdamW(
+            optimizer_grouped_parameters,
+            lr=self.lr,
+            betas=(0.9, 0.999),
+            eps=1e-8
+        )
+
+        # Schedulatore con warm-up e cosine annealing
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=self.trainer.max_epochs,
+                eta_min=1e-6
+            ),
+            "interval": "epoch",
+            "frequency": 1
+        }
+
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def forward(self, img, txt, orig, labels):
         # Unimodal features and contrastive loss
@@ -74,11 +127,11 @@ class Model(L.LightningModule):
         # Multimodal features and auxiliary moco loss
         z_tm = self.multimodal_feature_extraction(img, txt)
 
-        clip_distance_t = self.dist_loss(z_bert, z_tm)
-        clip_distance_i = self.dist_loss(z_vit, z_tm)
-        clip_distance = (clip_distance_t + clip_distance_i) / 2.0
+        # clip_distance_t = self.dist_loss(z_bert, z_tm)
+        # clip_distance_i = self.dist_loss(z_vit, z_tm)
+        # clip_distance = (clip_distance_t + clip_distance_i) / 2.0
 
-        loss = contrastive_loss + 0.3 * clip_distance
+        loss = contrastive_loss
 
         # Fusion via attention blocks
         z = z_t

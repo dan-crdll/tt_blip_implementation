@@ -10,3 +10,4 @@ gpus: [0, 1, 2]
 temp: 0.2
 momentum: 0.9
 queue_size: 32
+lr:1e-5
