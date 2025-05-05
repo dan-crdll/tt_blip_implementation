@@ -84,7 +84,7 @@ class Model(L.LightningModule):
         z = z_t
         for layer in self.fusion_layer:
             z = layer(z, z_i, z_tm)
-        z = F.adaptive_avg_pool1d(z.permute(0, 2, 1), 1).squeeze(-1)
+        z = z[:, 0]
 
         # Classification
         y = self.classifier(z)

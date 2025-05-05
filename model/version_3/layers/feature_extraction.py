@@ -9,7 +9,7 @@ import copy
 class ImageFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
-        self.vit = ViT("WinKawaks/vit-tiny-patch16-224", device, unfreeze_from_layer=9)
+        self.vit = ViT("google/vit-base-patch16-224", device, unfreeze_from_layer=9)
         self.blip = Blip2Model("dandelin/vilt-b32-mlm", device, frozen=False)
 
     def forward(self, x):
@@ -17,7 +17,7 @@ class ImageFeatureExtraction(nn.Module):
 
         z_blip = self.blip(image=x)
 
-        z = torch.cat([z_vit[:], z_blip[:, 1:]], dim=1)
+        z = torch.cat([z_vit, z_blip], dim=1)
 
         return z, (z_vit, z_blip[:, 0])
 
@@ -25,14 +25,14 @@ class ImageFeatureExtraction(nn.Module):
 class TextFeatureExtraction(nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
-        self.text_encoder = TextEncoder("albert/albert-base-v2", device=device, unfreeze_from_layer=3)
+        self.text_encoder = TextEncoder("distilbert/distilbert-base-uncased", device=device, unfreeze_from_layer=3)
         self.blip = Blip2Model("dandelin/vilt-b32-mlm", device, frozen=False)
 
     def forward(self, x):
         z_text = self.text_encoder(x)
         z_blip = self.blip(text=x)
 
-        z = torch.cat([z_text[:], z_blip[:, 1:]], dim=1)
+        z = torch.cat([z_text, z_blip], dim=1)
         return z, (z_text, z_blip[:, 0])
     
 

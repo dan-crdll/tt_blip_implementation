@@ -15,17 +15,15 @@ class Blip2Model(nn.Module):
 
         self.processor = ViltProcessor.from_pretrained(hf_repo)
         self.model = ViltModel.from_pretrained(hf_repo)
-
-        self.projector = nn.Linear(768, 384)
         
         for param in self.model.parameters():
             param.requires_grad_(False)
         self.eval()
 
-        if not frozen:
-            for param in self.model.encoder.layer[-1].parameters():
-                param.requires_grad_(True)
-            self.train()
+        # if not frozen:
+        #     for param in self.model.encoder.layer[-1].parameters():
+        #         param.requires_grad_(True)
+        #     self.train()
 
     def forward(self, image=None, text=None, use_autocast=True):
         # Determine batch size
@@ -54,9 +52,6 @@ class Blip2Model(nn.Module):
           )
 
         z = z.last_hidden_state
-
-        # Project features
-        z = self.projector(z)
 
         return z
 

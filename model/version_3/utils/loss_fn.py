@@ -8,7 +8,7 @@ class InfoNCE(nn.Module):
     Standard InfoNCE loss for contrastive learning.
     Each sample is contrasted against all others in the batch.
     """
-    def __init__(self, temp=1.0, embed_dim=384, projected_dim=256):
+    def __init__(self, temp=1.0, embed_dim=768, projected_dim=256):
         super().__init__()
         self.temp = temp
         self.projector_a = nn.Linear(embed_dim, projected_dim)
@@ -32,7 +32,7 @@ class InfoNCE(nn.Module):
 
 
 class ITMLoss(nn.Module):
-    def __init__(self, temp, momentum, image_encoder, text_encoder, queue_size=4096, embed_dim=384):
+    def __init__(self, temp, momentum, image_encoder, text_encoder, queue_size=4096, embed_dim=768):
         super().__init__()
 
         self.image_encoder = image_encoder
