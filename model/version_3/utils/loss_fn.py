@@ -106,8 +106,17 @@ class ITMLoss(nn.Module):
         fake_images = torch.argwhere(fake_images)
         fake_texts = torch.argwhere(fake_texts)
 
-        all_i = torch.cat([z_i_m_orig, z_i_m[fake_images].squeeze(1), queue_i], dim=0)
-        all_t = torch.cat([z_t_m_orig, z_t_m[fake_texts].squeeze(1), queue_t], dim=0)
+        not_empty_queue_i = queue_i.sum(-1)
+        not_empty_queue_t = queue_t.sum(-1)
+        not_empty_queue_i = torch.argwhere(not_empty_queue_i)
+        not_empty_queue_t = torch.argwhere(not_empty_queue_t)
+
+        all_i = torch.cat(
+            [z_i_m_orig, z_i_m[fake_images].squeeze(1), queue_i[not_empty_queue_i].squeeze(1)], 
+            dim=0)
+        all_t = torch.cat(
+            [z_t_m_orig, z_t_m[fake_texts].squeeze(1), queue_t[not_empty_queue_t].squeeze(1)], 
+            dim=0)
 
         l_i2t = self.infonce_loss(img_cls, all_t)
         l_t2i = self.infonce_loss(txt_cls, all_i)
