@@ -69,7 +69,6 @@ class Model(L.LightningModule):
         self.val_map_multi = MultilabelAveragePrecision(num_labels=4)
 
     def configure_optimizers(self):
-        # Separazione dei parametri con e senza weight decay
         decay = set()
         no_decay = set()
         whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv2d)
@@ -87,17 +86,23 @@ class Model(L.LightningModule):
                 elif isinstance(m, blacklist_weight_modules):
                     no_decay.add(fpn)
 
-        # Rimuovi eventuali sovrapposizioni
+        # Recupera tutti i parametri
         param_dict = {pn: p for pn, p in self.named_parameters()}
         inter_params = decay & no_decay
         union_params = decay | no_decay
 
+        # Controllo di sicurezza
         assert len(inter_params) == 0, f"Parameters in both decay and no_decay sets: {inter_params}"
-        assert len(param_dict.keys() - union_params) == 0, f"Parameters missing: {param_dict.keys() - union_params}"
+
+        # Fallback: aggiungi i parametri mancanti a no_decay
+        missing = param_dict.keys() - union_params
+        if missing:
+            print(f"[Info] Adding {len(missing)} uncategorized parameters to no_decay:\n{missing}")
+            no_decay.update(missing)
 
         optimizer_grouped_parameters = [
-            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": self.weight_decay},
-            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0}
+            {"params": [param_dict[pn] for pn in sorted(decay)], "weight_decay": self.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(no_decay)], "weight_decay": 0.0}
         ]
 
         optimizer = torch.optim.AdamW(
@@ -107,7 +112,6 @@ class Model(L.LightningModule):
             eps=1e-8
         )
 
-        # Schedulatore con warm-up e cosine annealing
         scheduler = {
             "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer,
