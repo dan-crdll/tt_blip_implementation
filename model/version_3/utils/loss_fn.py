@@ -64,17 +64,29 @@ class ITMLoss(nn.Module):
         Enqueue new keys and dequeue old ones in a circular fashion.
         """
         batch_size_i = keys_i.size(0)
-        ptr_i = int(self.queue_ptr_i)
         batch_size_t = keys_t.size(0)
+        ptr_i = int(self.queue_ptr_i)
         ptr_t = int(self.queue_ptr_t)
 
-        self.queue_i[ptr_i:ptr_i + batch_size_i] = keys_i
-        self.queue_t[ptr_t:ptr_t + batch_size_t] = keys_t
+        # Gestione wrap-around per queue_i
+        if ptr_i + batch_size_i <= self.queue_size:
+            self.queue_i[ptr_i:ptr_i + batch_size_i] = keys_i
+        else:
+            overflow = (ptr_i + batch_size_i) - self.queue_size
+            self.queue_i[ptr_i:] = keys_i[:self.queue_size - ptr_i]
+            self.queue_i[:overflow] = keys_i[self.queue_size - ptr_i:]
 
-        ptr_i = (ptr_i + batch_size_i) % self.queue_size
-        ptr_t = (ptr_t + batch_size_t) % self.queue_size
-        self.queue_ptr_i[0] = ptr_i
-        self.queue_ptr_t[0] = ptr_t
+        # Gestione wrap-around per queue_t
+        if ptr_t + batch_size_t <= self.queue_size:
+            self.queue_t[ptr_t:ptr_t + batch_size_t] = keys_t
+        else:
+            overflow = (ptr_t + batch_size_t) - self.queue_size
+            self.queue_t[ptr_t:] = keys_t[:self.queue_size - ptr_t]
+            self.queue_t[:overflow] = keys_t[self.queue_size - ptr_t:]
+
+        # Aggiorna i puntatori
+        self.queue_ptr_i[0] = (ptr_i + batch_size_i) % self.queue_size
+        self.queue_ptr_t[0] = (ptr_t + batch_size_t) % self.queue_size
 
     def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig, labels):
         orig_img, orig_txt = orig
