@@ -44,6 +44,6 @@ class TextEncoder(nn.Module):
         inputs = self.tokenizer(text, return_tensors='pt', padding=True, truncation=True)
         input_ids = inputs['input_ids'].to(self.device, non_blocking=True)
         attention_mask = inputs['attention_mask'].to(self.device, non_blocking=True)
-        z = self.encoder.albert(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        z = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
 
         return z
