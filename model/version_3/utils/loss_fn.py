@@ -104,7 +104,7 @@ class ITMLoss(nn.Module):
         l_itm = (l_i2t + l_t2i + l_i2i + l_t2t) / 4
         
         # Update the queue
-        self._dequeue_and_enqueue(z_i_m[fake_images], z_t_m[fake_texts])
+        self._dequeue_and_enqueue(z_i_m[fake_images].squeeze(1), z_t_m[fake_texts].squeeze(1))
 
         # Momentum encoder update
         img_params = list(img_encoder_params)
