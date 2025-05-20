@@ -53,7 +53,7 @@ def create_classifiers():
 
 def main():
     print("##### HYPERPARAMS CONFIGURATION #####")
-    lr = int(input("Learning rate: "))
+    lr = float(input("Learning rate (e.g., 1e-3): "))
     batch_size = int(input("Batch size: "))
     epochs = int(input("Epochs: "))
     grad_acc = int(input("Gradient accumulation: "))
