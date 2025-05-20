@@ -2,7 +2,28 @@ from model.version_modular.layers.feature_extraction import create_feature_extra
 from model.version_modular.layers.cross_attention_block import create_fusion_layer
 from model.version_modular.architecture import Model
 from torch import nn 
+from model.version_3.utils.load_data import DatasetLoader
+from lightning.pytorch.loggers import WandbLogger
+import torch
+from dgm4_download import download_dgm4
+import yaml
+import random
+import os
+import numpy as np
+import lightning as L
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+
+def seed_everything(seed=42):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed_everything()
 
 
 def create_classifiers():
@@ -40,6 +61,15 @@ def main():
 
     print("##### HYPERPARAMS CONFIGURATION #####")
     lr = int(input("Learning rate: "))
+    batch_size = int(input("Batch size: "))
+    epochs = int(input("Epochs: "))
+    grad_acc = int(input("Gradient accumulation: "))
+    gpus = input("GPUs (separate with comma - no space): ")
+    gpus = [int(gpu) for gpu in gpus.split(",")]
+
+    origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
+    manipulations = ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
+
 
     model = Model(
         feature_extraction_layer,
@@ -72,21 +102,4 @@ def main():
     torch.save(model.state_dict(), "./model_state_dict.pth")
 
 if __name__=="__main__":
-    with open("training_parameters.yaml", "r") as file:
-        params = yaml.safe_load(file)
-
-    main(
-        num_heads=params["num_heads"],
-        hidden_dim=params["hidden_dim"],
-        trainable=params["trainable"],
-        epochs=params["epochs"],
-        batch_size=params["batch_size"],
-        grad_acc=params["grad_acc"],
-        origins=params['origins'],
-        manipulations=params['manipulations'],
-        gpus=params['gpus'],
-        temp=params['temp'],
-        momentum=params['momentum'],
-        queue_size=params['queue_size'],
-        lr=float(params['lr'])
-    )
+    main()
