@@ -12,7 +12,6 @@ import os
 import numpy as np
 import lightning as L
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 def seed_everything(seed=42):
     torch.manual_seed(seed)
@@ -22,8 +21,6 @@ def seed_everything(seed=42):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-seed_everything()
 
 
 def create_classifiers():
@@ -55,20 +52,23 @@ def create_classifiers():
 
 
 def main():
-    feature_extraction_layer = create_feature_extraction()
-    fusion_layer = create_fusion_layer()
-    bin_classifier, multi_classifier = create_classifiers()
-
     print("##### HYPERPARAMS CONFIGURATION #####")
     lr = int(input("Learning rate: "))
     batch_size = int(input("Batch size: "))
     epochs = int(input("Epochs: "))
     grad_acc = int(input("Gradient accumulation: "))
     gpus = input("GPUs (separate with comma - no space): ")
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     gpus = [int(gpu) for gpu in gpus.split(",")]
+    
+    seed_everything()
 
     origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
     manipulations = ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
+
+    feature_extraction_layer = create_feature_extraction()
+    fusion_layer = create_fusion_layer()
+    bin_classifier, multi_classifier = create_classifiers()
 
 
     model = Model(
