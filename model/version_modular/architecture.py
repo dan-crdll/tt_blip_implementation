@@ -17,26 +17,21 @@ from model.version_3.utils.blip2_model import Blip2Model
 class Model(L.LightningModule):
     def __init__(
         self, 
-        embed_dim, 
-        num_heads, 
-        hidden_dim, 
-        temp=1.0, 
-        momentum=0.9, 
-        queue_size=32, 
+        feature_extraction_layer,
+        fusion_layer,
+        classifier_bin,
+        classifier_multi,
         lr=1e-5):
         super().__init__()
 
         # self.automatic_optimization = False
 
         # -- Feature Extraction Modules --
-        self.feature_extraction = FeatureExtraction('cuda', temp, queue_size, momentum)
+        self.feature_extraction = feature_extraction_layer
         self.multimodal_feature_extraction = Blip2Model("Salesforce/blip-itm-base-coco")
 
         # -- Cross-Attention Fusion Layers --
-        self.fusion_layer = nn.ModuleList([
-            CrossAttnBlock(embed_dim, num_heads, hidden_dim)
-            for _ in range(3)
-        ])
+        self.fusion_layer = fusion_layer
 
         # self.memory = Memory(embed_dim)
 
@@ -50,25 +45,9 @@ class Model(L.LightningModule):
         # self.awl = AutomaticWeightedLoss(3)
 
         # -- Classification Head --
-        self.classifier_bin = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, 1)  
-        )
+        self.classifier_bin = classifier_bin
 
-        self.classifier_multi = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, 4)  
-        )
+        self.classifier_multi = classifier_multi
 
         # -- Loss Functions --
         self.loss_fn_bin = nn.BCEWithLogitsLoss()

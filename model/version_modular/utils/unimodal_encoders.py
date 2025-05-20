@@ -1,4 +1,4 @@
-from transformers import ViTModel, DistilBertModel, ViTImageProcessor, DebertaV2Tokenizer, DebertaV2Model
+from transformers import ViTModel, ViTImageProcessor, DebertaV2Tokenizer, DebertaV2Model
 from torch import nn
 
 class ViT(nn.Module):

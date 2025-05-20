@@ -35,16 +35,16 @@ class GatedUnit(nn.Module):
 
 
 class CrossAttnBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, hidden_dim):
+    def __init__(self, embed_dim, num_heads, hidden_dim, dropout):
         super().__init__()
 
-        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True, dropout=dropout)
         self.ln_t = nn.LayerNorm(embed_dim)
 
-        self.cross_attn_it = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.cross_attn_it = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True, dropout=dropout)
         self.ln_it = nn.LayerNorm(embed_dim)
 
-        self.cross_attn_tm = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.cross_attn_tm = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True, dropout=dropout)
         self.ln_tm = nn.LayerNorm(embed_dim)
 
         self.ln = nn.LayerNorm(embed_dim)
@@ -102,3 +102,18 @@ class CrossAttnBlock(nn.Module):
         # z = z_total
         z = self.ln(z_total)
         return z
+
+
+def create_fusion_layer():
+    print("##### FUSION LAYER CONFIGURATION #####")
+
+    embed_dim = 768
+    num_heads = int(input("Cross attention heads: "))
+    hidden_dim = int(input("Cross attention hidden dim: "))
+    dropout = float(input("Cross attention dropout: "))
+    num_blocks = int(input("Number of cross attention blocks: "))
+
+    return nn.ModuleList([
+            CrossAttnBlock(embed_dim, num_heads, hidden_dim, dropout)
+            for _ in range(num_blocks)
+        ])
