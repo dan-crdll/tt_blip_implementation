@@ -91,11 +91,11 @@ class ITMLoss(nn.Module):
     def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig, labels):
         orig_img, orig_txt = orig
         with torch.no_grad():
-            z_i_m = self.image_encoder(img)[:, 0].detach()
-            z_t_m = self.text_encoder(txt)[:, 0].detach()
+            z_i_m = self.image_encoder(img)[-1][:, 0].detach()
+            z_t_m = self.text_encoder(txt)[-1][:, 0].detach()
 
-            z_i_m_orig = self.image_encoder(orig_img)[:, 0].detach()
-            z_t_m_orig = self.text_encoder(orig_txt)[:, 0].detach()
+            z_i_m_orig = self.image_encoder(orig_img)[-1][:, 0].detach()
+            z_t_m_orig = self.text_encoder(orig_txt)[-1][:, 0].detach()
 
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()
@@ -140,10 +140,78 @@ class ITMLoss(nn.Module):
 class DistanceLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.avg_pool = nn.AdaptiveAvgPool1d(1)
 
     def forward(self, x1, x2):
-        x1 = self.avg_pool(x1.permute(0, 2, 1)).squeeze(-1)
-        x2 = self.avg_pool(x2.permute(0, 2, 1)).squeeze(-1)
+        x1 = x1[:, 0]
+        x2 = x2[:, 0]
         loss = 1 - F.cosine_similarity(x1, x2).mean()
         return loss
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='sum'):
+        """
+        alpha: scalar or list/tuple/tensor of shape [num_classes].
+               weight for the positive class; negative class weight = (1 - alpha).
+        gamma: focusing parameter >= 0
+        reduction: 'none' | 'mean' | 'sum'
+        """
+        super().__init__()
+        # store alpha as tensor for easy broadcasting
+        if isinstance(alpha, (list, tuple)):
+            self.alpha = torch.tensor(alpha, dtype=torch.float32)
+        else:
+            self.alpha = torch.tensor([alpha], dtype=torch.float32)
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, logits, targets):
+        """
+        logits: Tensor of shape [batch, num_classes]
+        targets: same shape, with 0/1 entries
+        """
+        # ensure alpha is on same device
+        alpha = self.alpha.to(logits.device)
+        # compute per-sample, per-class BCE
+        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        probs = torch.sigmoid(logits)
+        # p_t = prob of the true class
+        p_t = targets * probs + (1 - targets) * (1 - probs)
+        # alpha_t = weight for the true class
+        alpha_t = targets * alpha + (1 - targets) * (1 - alpha)
+        # focal term
+        loss = alpha_t * (1 - p_t) ** self.gamma * bce
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
+
+
+class AutomaticWeightedLoss(nn.Module):
+    """automatically weighted multi-task loss
+
+    Params：
+        num: int，the number of loss
+        x: multi-task loss
+    Examples：
+        loss1=1
+        loss2=2
+        awl = AutomaticWeightedLoss(2)
+        loss_sum = awl(loss1, loss2)
+    """
+    def __init__(self, num=2):
+        super(AutomaticWeightedLoss, self).__init__()
+        params = torch.ones(num, requires_grad=True)
+        self.params = torch.nn.Parameter(params)
+
+    def forward(self, *x):
+        loss_sum = 0
+        for i, loss in enumerate(x):
+            loss_sum += 0.5 / (self.params[i] ** 2) * loss + torch.log(1 + self.params[i] ** 2)
+        return loss_sum

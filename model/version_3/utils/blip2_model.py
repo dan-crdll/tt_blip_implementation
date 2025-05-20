@@ -1,4 +1,4 @@
-from transformers import ViltProcessor, ViltModel
+from transformers import BlipProcessor, BlipForImageTextRetrieval
 import torch
 from torch import nn
 from PIL import Image
@@ -6,24 +6,19 @@ import numpy as np
 import lightning as L
 
 class Blip2Model(nn.Module):
-    def __init__(self, hf_repo, device='cuda', frozen=True):
+    def __init__(self, hf_repo, device='cuda', frozen=False):
         super().__init__()
         # Set device automatically if not specified
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
 
-        self.processor = ViltProcessor.from_pretrained(hf_repo)
-        self.model = ViltModel.from_pretrained(hf_repo)
-        
+        self.processor = BlipProcessor.from_pretrained(hf_repo)
+        self.model = BlipForImageTextRetrieval.from_pretrained(hf_repo)
+
         for param in self.model.parameters():
             param.requires_grad_(False)
         self.eval()
-
-        # if not frozen:
-        #     for param in self.model.encoder.layer[-1].parameters():
-        #         param.requires_grad_(True)
-        #     self.train()
 
     def forward(self, image=None, text=None, use_autocast=True):
         # Determine batch size
@@ -36,24 +31,19 @@ class Blip2Model(nn.Module):
             text = [""] * batch_size
 
         # Preprocess
-        processed = self.processor(text=text, images=image, return_tensors='pt', padding=True, truncation=True)
+        processed = self.processor(text=text, images=image, return_tensors='pt', padding=True)
 
         x_img = processed['pixel_values'].to(self.device)
         x_txt = processed['input_ids'].to(self.device)
         x_attn_mask = processed['attention_mask'].to(self.device)
-        token_type_ids = processed['token_type_ids'].to(self.device)
-        pixel_mask = processed['pixel_mask'].to(self.device)
+
         z = self.model(
-            pixel_values=x_img, 
-            input_ids=x_txt, 
+            pixel_values=x_img,
+            input_ids=x_txt,
             attention_mask=x_attn_mask,
-            token_type_ids=token_type_ids,
-            pixel_mask=pixel_mask
           )
 
-        z = z.last_hidden_state
-
-        return z
+        return z.last_hidden_state
 
     def free_memory(self):
         """Free up CUDA memory after use."""

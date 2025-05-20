@@ -1,13 +1,13 @@
-num_heads: 8
-hidden_dim: 1024
-trainable: 3
+num_heads: 4
+hidden_dim: 256
+trainable: 1
 epochs: 15
 batch_size: 16
 grad_acc: 32
-origins: ['washington_post', 'bbc']
-manipulations: ['simswap', 'StyleCLIP']
-gpus: [0, 1, 2]
-temp: 0.2
-momentum: 0.9
-queue_size: 32
-lr:1e-5
+origins: ['washington_post', 'bbc', 'usa_today', 'guardian']
+manipulations: ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
+gpus: [0, 1]
+temp: 0.04
+momentum: 0.999
+queue_size: 1024
+lr: 1e-4

@@ -8,6 +8,8 @@ import random
 import os
 import numpy as np
 import lightning as L
+from torchmetrics import Accuracy, F1Score, Precision, Recall
+import matplotlib.pyplot as plt
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
@@ -23,33 +25,52 @@ def seed_everything(seed=42):
 seed_everything()
 
 def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins, manipulations, gpus, temp, momentum, queue_size, lr):
-    print("Downloading DGM4")
-    if 'data' not in os.listdir('.'):
-        download_dgm4(origins, manipulations)
-    print("Dataset Downloaded")
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = Model(768, num_heads, hidden_dim, temp, momentum, queue_size, lr)
-    logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
-
-    model.load_partial_weights("./Thesis_New/izkt1qtw/checkpoints/epoch=4-step=1020.ckpt")
+    model.load_partial_weights("./Thesis_New/")
+    model.eval()
+    model = model.to(device)
 
     torch.set_float32_matmul_precision('high')
     
     train_dl, val_dl = DatasetLoader(origins+manipulations, batch_size).get_dataloaders()
 
-    trainer = L.Trainer(
-        max_epochs=epochs, 
-        logger=logger, 
-        log_every_n_steps=1, 
-        precision='bf16-mixed', 
-        accumulate_grad_batches=grad_acc, 
-        devices=gpus,
-        # strategy='ddp_find_unused_parameters_true',
-        gradient_clip_val=0.7
-    )
-    trainer.fit(model, train_dl, val_dl)
+    accuracies = []
+    thresholds = [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
 
-    torch.save(model.state_dict(), "./model_state_dict.pth")
+    with torch.no_grad():
+        for threshold in thresholds:
+            accuracy = Accuracy(task='binary', threshold=threshold).to(device)
+            for batch in val_dl:
+                img, txt, (y_bin, y_multi), orig = batch
+
+                # Move tensors to appropriate device
+                img = img.to(device)
+                txt = txt.to(device)
+                y_bin = y_bin.to(device)
+                y_multi = y_multi.to(device)
+                # If orig is tensor, move it. If not, skip.
+                if isinstance(orig, torch.Tensor):
+                    orig = orig.to(device)
+
+                # Forward pass (removed 'split' param)
+                (pred_bin, pred_multi), c_loss, (z_img_b, z_txt_b) = model(img, txt, orig, y_multi)
+
+                pred_bin = torch.sigmoid(pred_bin)
+                accuracy.update(pred_bin, y_bin)
+
+            # Compute accuracy for this threshold
+            accuracies.append(accuracy.compute().item())
+
+    plt.scatter(thresholds, accuracies)
+    plt.xlabel("Threshold")
+    plt.ylabel("Accuracy")
+    plt.title("Threshold vs Accuracy on Validation Set")
+    plt.savefig("accuracy_plot.png")
+    plt.close()
+
 
 if __name__=="__main__":
     with open("training_parameters.yaml", "r") as file:

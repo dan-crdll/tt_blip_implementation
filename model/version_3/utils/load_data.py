@@ -1,8 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
 from model.utils.data_preprocessor import DataPreprocessor
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 from datasets import load_dataset
+import random
 
 class DatasetLoader:
     def __init__(
@@ -56,6 +57,41 @@ class DatasetLoader:
             data_list.append(item)
         return data_list
 
+    def augment_image_pil(self, image):
+        # Random horizontal flip
+        if random.random() < 0.5:
+            image = ImageOps.mirror(image)
+
+        # Random rotation
+        if random.random() < 0.5:
+            angle = random.uniform(-30, 30)
+            image = image.rotate(angle)
+
+        # Random color jitter (brightness, contrast, sharpness)
+        if random.random() < 0.5:
+            enhancer = ImageEnhance.Brightness(image)
+            image = enhancer.enhance(random.uniform(0.8, 1.2))
+
+        if random.random() < 0.5:
+            enhancer = ImageEnhance.Contrast(image)
+            image = enhancer.enhance(random.uniform(0.8, 1.2))
+
+        if random.random() < 0.5:
+            enhancer = ImageEnhance.Sharpness(image)
+            image = enhancer.enhance(random.uniform(0.8, 2.0))
+
+        # Random crop with padding
+        if random.random() < 0.5:
+            padding = 10
+            image = ImageOps.expand(image, border=padding, fill=0)
+            left = random.randint(0, padding * 2)
+            upper = random.randint(0, padding * 2)
+            right = left + image.size[0] - padding * 2
+            lower = upper + image.size[1] - padding * 2
+            image = image.crop((left, upper, right, lower))
+
+        return image
+
     def collate_fn(self, batch):
         images = []
         texts = []
@@ -76,9 +112,47 @@ class DatasetLoader:
             images.append(Image.open(path_img).convert('RGB'))
             texts.append(b['text'])
             if b['fake_cls'] == 'orig':
-                labels.append(1)
-            else:
                 labels.append(0)
+            else:
+                labels.append(1)
+                manip = b['fake_cls'].split('&')
+                for m in manip:
+                    multi[poss[m]] = 1.0
+            multi_labels.append(torch.tensor(multi).unsqueeze(0))
+            path_img = f"./data/DGM4/origin{b['orig_image']}"
+            original_images.append(Image.open(path_img).convert('RGB'))
+            original_txts.append(b['orig_text'])
+
+        labels = torch.tensor(labels)
+        multi_labels = torch.vstack(multi_labels)
+        y = (labels.to(torch.float), multi_labels)
+        return images, texts, y, (original_images, original_txts)
+
+    def collate_fn_aug(self, batch):
+        images = []
+        texts = []
+        labels = []
+        multi_labels = []
+        original_images = []
+        original_txts = []
+
+        poss = {
+            'face_attribute': 0,
+            'face_swap': 1,
+            'text_attribute': 2,
+            'text_swap': 3,
+        }
+        for b in batch:
+            multi = [0, 0, 0, 0]
+            path_img = f"./data/{b['image']}"
+            img = Image.open(path_img).convert('RGB')
+            img = self.augment_image_pil(img)
+            images.append(img)
+            texts.append(b['text'])
+            if b['fake_cls'] == 'orig':
+                labels.append(0)
+            else:
+                labels.append(1)
                 manip = b['fake_cls'].split('&')
                 for m in manip:
                     multi[poss[m]] = 1.0
@@ -93,6 +167,6 @@ class DatasetLoader:
         return images, texts, y, (original_images, original_txts)
 
     def get_dataloaders(self):
-        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
+        train_loader = DataLoader(self.train_dataset, self.batch_size, collate_fn=self.collate_fn_aug, drop_last=True)
         test_loader = DataLoader(self.test_dataset, self.batch_size, collate_fn=self.collate_fn, drop_last=True)
         return train_loader, test_loader

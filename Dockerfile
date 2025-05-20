@@ -10,4 +10,4 @@ RUN apt install vim -y
 
 RUN cd /workspace
 
-CMD ["bash", "-c", "git clone https://github.com/dan-crdll/tt_blip_implementation.git && wandb login && exec bash"]
+CMD ["bash", "-c", "wandb login && exec bash"]
