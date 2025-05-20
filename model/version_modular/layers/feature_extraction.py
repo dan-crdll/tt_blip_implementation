@@ -84,7 +84,7 @@ def create_feature_extraction():
     print("##### FEATURE EXTRACTION LAYER CONFIGURATION #####")
 
     vit_choice = int(input("Use ViT Base (0) or ViT Large (1): "))
-    hf_repo_vit = vit_choice
+    hf_repo_vit = hf_repo_vit[vit_choice]
     if vit_choice == 1:
         large_vit=True
 
