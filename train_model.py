@@ -81,8 +81,6 @@ def main():
 
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
 
-    model.load_partial_weights("./Thesis_New/izkt1qtw/checkpoints/epoch=4-step=1020.ckpt")
-
     torch.set_float32_matmul_precision('high')
     
     train_dl, val_dl = DatasetLoader(origins+manipulations, batch_size).get_dataloaders()
