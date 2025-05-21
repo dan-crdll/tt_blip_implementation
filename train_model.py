@@ -58,6 +58,7 @@ def main():
     epochs = int(input("Epochs: "))
     grad_acc = int(input("Gradient accumulation: "))
     gpus = input("GPUs (separate with comma - no space): ")
+    grad_clip = float(input("Gradient clipping: "))
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     gpus = [int(gpu) for gpu in gpus.split(",")]
     
@@ -93,7 +94,7 @@ def main():
         accumulate_grad_batches=grad_acc, 
         devices=gpus,
         # strategy='ddp_find_unused_parameters_true',
-        gradient_clip_val=0.7
+        gradient_clip_val=grad_clip
     )
     trainer.fit(model, train_dl, val_dl)
 
