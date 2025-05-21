@@ -77,6 +77,7 @@ class CrossAttnBlock(nn.Module):
         #     nn.ReLU()
         # )
 
+
     def forward(self, z, z_i, z_m):
         z_t, _ = self.self_attn(z, z, z)
         z_t = self.ln_t(z_t + z)
@@ -104,6 +105,22 @@ class CrossAttnBlock(nn.Module):
         return z
 
 
+def initialize_weights(module):
+    if isinstance(module, nn.Linear):
+        nn.init.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+    elif isinstance(module, nn.MultiheadAttention):
+        nn.init.xavier_uniform_(module.in_proj_weight)
+        if module.in_proj_bias is not None:
+            nn.init.zeros_(module.in_proj_bias)
+        nn.init.xavier_uniform_(module.out_proj.weight)
+        if module.out_proj.bias is not None:
+            nn.init.zeros_(module.out_proj.bias)
+    elif isinstance(module, nn.LayerNorm):
+        nn.init.ones_(module.weight)
+        nn.init.zeros_(module.bias)
+
 def create_fusion_layer():
     print("##### FUSION LAYER CONFIGURATION #####")
 
@@ -113,7 +130,11 @@ def create_fusion_layer():
     dropout = float(input("Cross attention dropout: "))
     num_blocks = int(input("Number of cross attention blocks: "))
 
-    return nn.ModuleList([
+    fusion_layer = nn.ModuleList([
             CrossAttnBlock(embed_dim, num_heads, hidden_dim, dropout)
             for _ in range(num_blocks)
         ])
+    
+    fusion_layer.apply(initialize_weights)
+    
+    return fusion_layer 
