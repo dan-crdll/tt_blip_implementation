@@ -91,11 +91,11 @@ class ITMLoss(nn.Module):
     def forward(self, img_cls, txt_cls, img, txt, img_encoder_params, text_encoder_params, orig, labels):
         orig_img, orig_txt = orig
         with torch.no_grad():
-            z_i_m = self.image_encoder(img)[-1][:, 0].detach()
-            z_t_m = self.text_encoder(txt)[-1][:, 0].detach()
+            z_i_m = self.image_encoder(img)[:, 0].detach()
+            z_t_m = self.text_encoder(txt)[:, 0].detach()
 
-            z_i_m_orig = self.image_encoder(orig_img)[-1][:, 0].detach()
-            z_t_m_orig = self.text_encoder(orig_txt)[-1][:, 0].detach()
+            z_i_m_orig = self.image_encoder(orig_img)[:, 0].detach()
+            z_t_m_orig = self.text_encoder(orig_txt)[:, 0].detach()
 
             queue_i = self.queue_i.detach()
             queue_t = self.queue_t.detach()

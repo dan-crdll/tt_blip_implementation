@@ -16,7 +16,7 @@ class ImageFeatureExtraction(nn.Module):
     def forward(self, x):
         z_vit = self.vit(x)
         if self.large:
-            z_vit = self.proj(z_vit[-1])
+            z_vit = self.proj(z_vit)
             return (None, z_vit)
 
         return z_vit
@@ -54,8 +54,8 @@ class FeatureExtraction(nn.Module):
 
         if split == 'Train':
             l_itm = self.itm_loss(
-                z_i[-1][:, 0], 
-                z_t[-1][:, 0], 
+                z_i[:, 0], 
+                z_t[:, 0], 
                 img, 
                 txt, 
                 self.feature_extractor_img.parameters(), 

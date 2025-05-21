@@ -19,7 +19,7 @@ class ViT(nn.Module):
     def forward(self, image):
         inputs = self.processor(image, return_tensors='pt')
         pixel_values = inputs['pixel_values'].to(self.device, non_blocking=True)
-        outputs = self.vit(pixel_values=pixel_values).hidden_states
+        outputs = self.vit(pixel_values=pixel_values).last_hidden_state
         return outputs   # (batch, seq_length, hidden_size)
 
 
@@ -44,6 +44,6 @@ class TextEncoder(nn.Module):
         inputs = self.tokenizer(text, return_tensors='pt', padding=True, truncation=True)
         input_ids = inputs['input_ids'].to(self.device, non_blocking=True)
         attention_mask = inputs['attention_mask'].to(self.device, non_blocking=True)
-        z = self.encoder(input_ids=input_ids, attention_mask=attention_mask).hidden_states
+        z = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
 
         return z
