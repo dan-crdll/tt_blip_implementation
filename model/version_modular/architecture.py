@@ -187,8 +187,8 @@ class Model(L.LightningModule):
 
         z_tm = self.multimodal_feature_extraction(img, txt)
 
-        clip_distance_t = self.dist_loss(z_t[-1], z_tm)
-        clip_distance_i = self.dist_loss(z_i[-1], z_tm)
+        clip_distance_t = self.dist_loss(z_t, z_tm)
+        clip_distance_i = self.dist_loss(z_i, z_tm)
         clip_distance = (clip_distance_t + clip_distance_i) / 2.0
 
         # clip_distance = self.dist_loss(z_t[-1], z_i[-1])
@@ -197,9 +197,9 @@ class Model(L.LightningModule):
         # loss = contrastive_loss
 
         # Fusion via attention blocks
-        z = z_t[-1]
+        z = z_t
         for k, layer in enumerate(self.fusion_layer):
-            z = layer(z, z_i[-1], z_tm)
+            z = layer(z, z_i, z_tm)
             # z = layer(z, z_i)
             # z = layer(z, z_i)
             # z = layer(z, z_t[k-5], z_i[k-5])
