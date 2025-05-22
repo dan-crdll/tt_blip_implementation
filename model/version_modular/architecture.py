@@ -200,11 +200,6 @@ class Model(L.LightningModule):
         z = z_t
         for k, layer in enumerate(self.fusion_layer):
             z = layer(z, z_i, z_tm)
-            # z = layer(z, z_i)
-            # z = layer(z, z_i)
-            # z = layer(z, z_t[k-5], z_i[k-5])
-
-        # z = self.memory(z)
 
         z = z[:, 0]
         # z = self.root(z)

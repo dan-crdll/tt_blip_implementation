@@ -91,7 +91,7 @@ def main():
         logger=logger, 
         log_every_n_steps=1, 
         precision='bf16-mixed', 
-        accumulate_grad_batches=grad_acc, 
+        accumulate_grad_batches=grad_acc, 1e-5
         devices=gpus,
         # strategy='ddp_find_unused_parameters_true',
         gradient_clip_val=grad_clip

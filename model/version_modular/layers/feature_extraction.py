@@ -17,7 +17,6 @@ class ImageFeatureExtraction(nn.Module):
         z_vit = self.vit(x)
         if self.large:
             z_vit = self.proj(z_vit)
-            return (None, z_vit)
 
         return z_vit
 
