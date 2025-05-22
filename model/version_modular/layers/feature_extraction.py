@@ -1,5 +1,5 @@
-from model.version_3.utils.unimodal_encoders import ViT, TextEncoder
-from model.version_3.utils.loss_fn import ITMLoss
+from model.version_modular.utils.unimodal_encoders import ViT, TextEncoder
+from model.version_modular.utils.loss_fn import ITMLoss
 import torch 
 from torch import nn 
 import copy
