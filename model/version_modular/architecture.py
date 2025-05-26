@@ -21,7 +21,7 @@ class Model(L.LightningModule):
         fusion_layer,
         classifier_bin,
         classifier_multi,
-        lr=1e-5):
+        lr=1e-5, epoch_tracker=None):
         super().__init__()
 
         # self.automatic_optimization = False
@@ -82,6 +82,8 @@ class Model(L.LightningModule):
         #     p for p in list(self.feature_extraction.parameters())
         #     if p.requires_grad
         # ]
+
+        self.epoch_tracker = epoch_tracker
 
     def _init_metrics(self):
         # Binary classification metrics
@@ -300,6 +302,10 @@ class Model(L.LightningModule):
         #         diff_tt = self.dist_loss(z_txt_b, z_txt_r)
 
         return total_loss
+
+    def on_train_epoch_start(self):
+        if self.epoch_tracker:
+            self.epoch_tracker.set(self.current_epoch)
 
     def training_step(self, batch, batch_idx):
         # torch.autograd.set_detect_anomaly(True)

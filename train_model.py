@@ -11,6 +11,7 @@ import random
 import os
 import numpy as np
 import lightning as L
+from build_difficulty_dataset import create_difficulty_dataset
 
 
 def seed_everything(seed=42):
@@ -23,22 +24,13 @@ def seed_everything(seed=42):
     torch.backends.cudnn.benchmark = False
 
 
-def create_classifiers():
-    print("#### CLASSIFIERS CONFIGURATION ####")
-
-    num_layers_bin = int(input("Number of layers for binary classifier: "))
-    num_layers_multi = int(input("Number of layers for multi-label classifier: "))
-
-    hidden_dim_bin = int(input("Hidden dim for binary classifier: "))
-    hidden_dim_multi = int(input("Hidden dim for multi-label classifier: "))
-
+def create_classifiers(hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_layers_multi):
+    print("#### INITIALIZING CLASSIFIERS ####")
     bin_layers = [nn.Linear(768, hidden_dim_bin)]
     for _ in range(num_layers_bin):
         bin_layers.append(nn.Linear(hidden_dim_bin, hidden_dim_bin))
         bin_layers.append(nn.ReLU())
     bin_layers.append(nn.Linear(hidden_dim_bin, 1))
-
-    bin_classifier = nn.Sequential(*bin_layers)
 
     multi_layers = [nn.Linear(768, hidden_dim_multi)]
     for _ in range(num_layers_multi):
@@ -46,22 +38,27 @@ def create_classifiers():
         multi_layers.append(nn.ReLU())
     multi_layers.append(nn.Linear(hidden_dim_multi, 4))
 
-    multi_classifier = nn.Sequential(*multi_layers)
-    return bin_classifier, multi_classifier
-
+    return nn.Sequential(*bin_layers), nn.Sequential(*multi_layers)
 
 
 def main():
-    print("##### HYPERPARAMS CONFIGURATION #####")
+    print("##### CONFIGURATION #####")
+    
     lr = float(input("Learning rate (e.g., 1e-3): "))
     batch_size = int(input("Batch size: "))
     epochs = int(input("Epochs: "))
     grad_acc = int(input("Gradient accumulation: "))
-    gpus = input("GPUs (separate with comma - no space): ")
+    gpus_input = input("GPUs (comma-separated, no spaces): ")
     grad_clip = float(input("Gradient clipping: "))
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpus
-    gpus = [int(gpu) for gpu in gpus.split(",")]
-    
+    curriculum = int(input("Use curriculum learning: Y (1) | N (0): "))
+    num_layers_bin = int(input("Number of layers for binary classifier: "))
+    num_layers_multi = int(input("Number of layers for multi-label classifier: "))
+    hidden_dim_bin = int(input("Hidden dim for binary classifier: "))
+    hidden_dim_multi = int(input("Hidden dim for multi-label classifier: "))
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpus_input
+    gpus = [int(gpu) for gpu in gpus_input.split(",")]
+
     seed_everything()
 
     origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
@@ -69,22 +66,27 @@ def main():
 
     feature_extraction_layer = create_feature_extraction()
     fusion_layer = create_fusion_layer()
-    bin_classifier, multi_classifier = create_classifiers()
+    bin_classifier, multi_classifier = create_classifiers(
+        hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_layers_multi
+    )
 
+    logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
+    torch.set_float32_matmul_precision('high')
+
+    if curriculum:
+        train_dl, val_dl, et = create_difficulty_dataset(batch_size)
+    else:
+        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size).get_dataloaders()
+        et = None
 
     model = Model(
         feature_extraction_layer,
         fusion_layer,
         bin_classifier,
         multi_classifier,
-        lr
+        lr,
+        et
     )
-
-    logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
-
-    torch.set_float32_matmul_precision('high')
-    
-    train_dl, val_dl = DatasetLoader(origins+manipulations, batch_size).get_dataloaders()
 
     trainer = L.Trainer(
         max_epochs=epochs, 
@@ -93,12 +95,12 @@ def main():
         precision='bf16-mixed', 
         accumulate_grad_batches=grad_acc,
         devices=gpus,
-        # strategy='ddp_find_unused_parameters_true',
         gradient_clip_val=grad_clip
     )
     trainer.fit(model, train_dl, val_dl)
 
     torch.save(model.state_dict(), "./model_state_dict.pth")
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
