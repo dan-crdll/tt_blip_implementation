@@ -4,12 +4,24 @@ from model.utils.data_preprocessor import DataPreprocessor
 from PIL import Image, ImageEnhance, ImageOps
 from datasets import load_dataset
 import random
+import json
+
+class EpochTracker:
+    def __init__(self):
+        self.epoch = 0
+    
+    def get(self):
+        return self.epoch
+    
+    def set(self, epoch):
+        self.epoch = epoch
 
 class DatasetLoader:
     def __init__(
         self,
         allowed_splits=['washington_post', 'bbc', 'guardian', 'usa_today', 'simswap', 'StyleCLIP', 'HFGI', 'infoswap'],
-        batch_size=8
+        batch_size=8,
+        difficulty=False
     ):
         self.dp = DataPreprocessor()
         self.allowed_splits = set(allowed_splits)
@@ -19,10 +31,15 @@ class DatasetLoader:
         self.real_pairs_ds = load_dataset("twelcone/VisualNews")
         self.real_pairs_lookup = self._build_real_pairs_dict()
 
-        self.dgm4_train = load_dataset("rshaojimmy/DGM4", split='train')
+        if not difficulty:
+            self.dgm4_train = load_dataset("rshaojimmy/DGM4", split='train')
         self.dgm4_val = load_dataset("rshaojimmy/DGM4", split='validation')
 
-        self.train_dataset = self._create_dataset(self.dgm4_train)
+        if not difficulty:
+            self.train_dataset = self._create_dataset(self.dgm4_train)
+        else:
+            self.et = EpochTracker()
+            self.train_dataset = self._create_difficulty_dataset()
         self.test_dataset = self._create_dataset(self.dgm4_val, is_val=True)
 
     def _build_real_pairs_dict(self):
@@ -33,6 +50,29 @@ class DatasetLoader:
             for item in split:
                 lookup[int(item['id'])] = (item['image_path'], item['caption'])
         return lookup
+
+    def _create_difficulty_dataset(self):
+        path = "./difficulty_dataset.json"
+
+        with open(path, 'r') as f:
+            data = json.load(f)
+        
+        class DifficultyDataset(IterableDataset):
+            def __init__(self, data, epoch_tracker):
+                self.data = data
+                self.epoch_tracker = epoch_tracker
+
+            def __iter__(self):
+                epoch = self.epoch_tracker.get()
+                max_d = self.difficulty_fn(epoch)
+                return (sample for sample in self.data if sample['difficulty'] <= max_d)
+
+            def difficulty_fn(self, epoch):
+                if epoch < 2: return 0.33
+                if epoch < 4: return 0.66
+                return 1.0
+        
+        return DifficultyDataset(data, self.et)
 
     def _create_dataset(self, ds, is_val=False):
         # Vectorize filtering

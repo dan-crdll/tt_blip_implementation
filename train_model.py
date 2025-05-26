@@ -64,6 +64,14 @@ def main():
     origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
     manipulations = ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
 
+    if curriculum:
+            ds_loader = DatasetLoader(origins + manipulations, batch_size, True)
+            train_dl, val_dl = ds_loader.get_dataloaders()
+            et = ds_loader.et 
+    else:
+        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size).get_dataloaders()
+        et = None
+
     feature_extraction_layer = create_feature_extraction()
     fusion_layer = create_fusion_layer()
     bin_classifier, multi_classifier = create_classifiers(
@@ -72,12 +80,6 @@ def main():
 
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
     torch.set_float32_matmul_precision('high')
-
-    if curriculum:
-        train_dl, val_dl, et = create_difficulty_dataset(batch_size)
-    else:
-        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size).get_dataloaders()
-        et = None
 
     model = Model(
         feature_extraction_layer,
