@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, IterableDataset
 from model.utils.data_preprocessor import DataPreprocessor
 from PIL import Image, ImageEnhance, ImageOps
 from datasets import load_dataset

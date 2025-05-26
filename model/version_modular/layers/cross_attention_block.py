@@ -48,8 +48,6 @@ class CrossAttnBlock(nn.Module):
         self.ln_tm = nn.LayerNorm(embed_dim)
 
         self.ln = nn.LayerNorm(embed_dim)
-        # self.gated_unit = GatedUnit(embed_dim)
-        # self.weights = nn.Parameter(torch.ones((2, 1, 1, 768)), requires_grad=True)
 
         self.mlp_it = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
@@ -68,14 +66,6 @@ class CrossAttnBlock(nn.Module):
         self.l_i = nn.LayerNorm(embed_dim)
         self.l_m = nn.LayerNorm(embed_dim)
 
-        # self.gru = nn.GRUCell(embed_dim, embed_dim)
-
-        # self.mlp = nn.Sequential(
-        #     nn.Linear(embed_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, embed_dim),
-        #     nn.ReLU()
-        # )
 
 
     def forward(self, z, z_i, z_m):
@@ -87,20 +77,17 @@ class CrossAttnBlock(nn.Module):
         z_it = self.mlp_it(z_it) + z_it
         z_it = self.l_i(z_it)
 
-        z_tm, _ = self.cross_attn_tm(z_t, z_m, z_m)
-        z_tm = self.ln_tm(z_tm + z_t)
-        z_tm = self.mlp_tm(z_tm) + z_tm
-        z_tm = self.l_m(z_tm)
+        if z_m:
+            z_tm, _ = self.cross_attn_tm(z_t, z_m, z_m)
+            z_tm = self.ln_tm(z_tm + z_t)
+            z_tm = self.mlp_tm(z_tm) + z_tm
+            z_tm = self.l_m(z_tm)
 
-        BSZ, SEQ_LEN, EMBED_DIM = z_it.shape
 
-        z_total = z_it + z_tm + z
+            z_total = z_it + z_tm + z
+        else:
+            z_total = z_it + z
 
-        # z_total = 0.5 * z_it + 0.5 * z_tm
-        # z_total = self.ln(z_total)
-
-        # z = self.mlp(z_total)
-        # z = z_total
         z = self.ln(z_total)
         return z
 

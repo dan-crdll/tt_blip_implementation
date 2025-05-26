@@ -2,7 +2,7 @@ from model.version_modular.layers.feature_extraction import create_feature_extra
 from model.version_modular.layers.cross_attention_block import create_fusion_layer
 from model.version_modular.architecture import Model
 from torch import nn 
-from model.version_3.utils.load_data import DatasetLoader
+from model.version_modular.utils.load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
@@ -55,6 +55,7 @@ def main():
     num_layers_multi = int(input("Number of layers for multi-label classifier: "))
     hidden_dim_bin = int(input("Hidden dim for binary classifier: "))
     hidden_dim_multi = int(input("Hidden dim for multi-label classifier: "))
+    blip = int(input("Use Blip: Y (1) | N(0): "))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus_input
     gpus = [int(gpu) for gpu in gpus_input.split(",")]
@@ -87,7 +88,8 @@ def main():
         bin_classifier,
         multi_classifier,
         lr,
-        et
+        et, 
+        blip
     )
 
     trainer = L.Trainer(

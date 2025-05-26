@@ -792,4 +792,6 @@ Fakeddit
 Thesis_New
 TT_BLIP
 
+*.json 
+*.jsonl
 *.pth
