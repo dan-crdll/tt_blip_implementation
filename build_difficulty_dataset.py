@@ -51,7 +51,7 @@ def create_difficulty_dataset(BSZ):
     multi_classifier = make_classifier(1024, 4, 3)  # reduced depth from 1024 to 3 for speed
 
     model = Model(feature_extraction, fusion_layer, bin_classifier, multi_classifier, 1e-4)
-    model.load_from_checkpoint("./Thesis_New/wp46l1i8/checkpoints/epoch=7-step=1632.ckpt")
+    model.load_partial_weights("./Thesis_New/wp46l1i8/checkpoints/epoch=7-step=1632.ckpt")
     model.eval()
     model.cuda()  # move to GPU if available
 
