@@ -1,8 +1,8 @@
 from model.version_modular.layers.feature_extraction import create_feature_extraction
 from model.version_modular.layers.cross_attention_block import create_fusion_layer
-from model.version_modular.efficient_architecture import Model
+from model.version_modular.architecture import Model
 from torch import nn 
-from model.version_modular.utils.more_efficient_load_data import DatasetLoader
+from model.version_modular.utils.load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
@@ -13,6 +13,7 @@ import numpy as np
 import lightning as L
 from build_difficulty_dataset import create_difficulty_dataset
 from lightning.pytorch.callbacks import ModelCheckpoint
+import argparseio
 
 
 class DGM4DataModule(L.LightningDataModule):
@@ -74,18 +75,18 @@ def create_classifiers(hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_lay
 def main():
     print("##### CONFIGURATION #####")
     
-    lr = float(input("Learning rate (e.g., 1e-3): "))
-    batch_size = int(input("Batch size: "))
-    epochs = int(input("Epochs: "))
-    grad_acc = int(input("Gradient accumulation: "))
-    gpus_input = input("GPUs (comma-separated, no spaces): ")
-    grad_clip = float(input("Gradient clipping: "))
-    curriculum = int(input("Use curriculum learning: Y (1) | N (0): "))
-    num_layers_bin = int(input("Number of layers for binary classifier: "))
-    num_layers_multi = int(input("Number of layers for multi-label classifier: "))
-    hidden_dim_bin = int(input("Hidden dim for binary classifier: "))
-    hidden_dim_multi = int(input("Hidden dim for multi-label classifier: "))
-    blip = int(input("Use Blip: Y (1) | N(0): "))
+    lr = 1e-4#float(input("Learning rate (e.g., 1e-3): "))
+    batch_size = 16#int(input("Batch size: "))
+    epochs = 30#int(input("Epochs: "))
+    grad_acc = 32#int(input("Gradient accumulation: "))
+    gpus_input = "0,1"#input("GPUs (comma-separated, no spaces): ")
+    grad_clip = 1#float(input("Gradient clipping: "))
+    curriculum = 1#int(input("Use curriculum learning: Y (1) | N (0): "))
+    num_layers_bin = 2#int(input("Number of layers for binary classifier: "))
+    num_layers_multi = 2#int(input("Number of layers for multi-label classifier: "))
+    hidden_dim_bin = 1024#int(input("Hidden dim for binary classifier: "))
+    hidden_dim_multi = 1024#int(input("Hidden dim for multi-label classifier: "))
+    blip = 1#int(input("Use Blip: Y (1) | N(0): "))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus_input
     gpus = [int(gpu) for gpu in gpus_input.split(",")]
@@ -100,7 +101,7 @@ def main():
             et = ds_loader.et 
             datamodule = DGM4DataModule(ds_loader, et)
     else:
-        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size, prefetch_factor=2).get_dataloaders()
+        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size).get_dataloaders()
         et = None
         datamodule = None
 
@@ -126,11 +127,11 @@ def main():
     
     checkpoint_callback = ModelCheckpoint(
         dirpath="./checkpoints",  # puoi cambiare in /mnt/hdd1 o /mnt/hdd2
-        filename="{epoch}_epoch_regularized",
+        filename="CL-{epoch}-{val_loss:.2f}",
         save_top_k=1,
         monitor="Val/loss",
         mode="min",
-        #save_weights_only=True
+        save_weights_only=True
     )
     trainer = L.Trainer(
         max_epochs=epochs, 
@@ -144,16 +145,13 @@ def main():
         # strategy='ddp_find_unused_parameters_true'
         # strategy="ddp",
         # dirpath='./TT_BLIP',
-        # callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback]
     )
-
-    #chkpt = torch.load("./checkpoints/CL-epoch=7-val_loss=0.00.ckpt")['state_dict']
-    #model.load_state_dict(chkpt)
 
     if curriculum:
         trainer.fit(model, datamodule=datamodule)
     else:
-        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/jp4bj7eb/checkpoints/epoch=3-step=816.ckpt') 
+        trainer.fit(model, train_dl, val_dl)
 
     # torch.save(model.state_dict(), "./model_state_dict.pth")
 

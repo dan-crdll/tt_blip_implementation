@@ -6,7 +6,7 @@ class ViT(nn.Module):
         super().__init__()
         self.device = device
         self.vit = ViTModel.from_pretrained(hf_repo, output_hidden_states=True)
-        self.processor = ViTImageProcessor.from_pretrained(hf_repo)
+        self.processor = ViTImageProcessor.from_pretrained(hf_repo, use_fast=True)
 
         # Freeze all layers, then unfreeze from specified encoder block
         for param in self.vit.parameters():
@@ -27,7 +27,7 @@ class TextEncoder(nn.Module):
     def __init__(self, hf_repo, device='cpu', unfreeze_from_layer=0, n_layers=6):
         super().__init__()
         self.encoder = DebertaV2Model.from_pretrained(hf_repo, output_hidden_states=True)
-        self.tokenizer = DebertaV2Tokenizer.from_pretrained(hf_repo, use_fast=False)
+        self.tokenizer = DebertaV2Tokenizer.from_pretrained(hf_repo, use_fast=True)
         self.n_layers = n_layers
 
         self.device = device

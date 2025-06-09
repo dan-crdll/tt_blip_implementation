@@ -82,17 +82,17 @@ def create_feature_extraction():
 
     print("##### FEATURE EXTRACTION LAYER CONFIGURATION #####")
 
-    vit_choice = int(input("Use ViT Base (0) or ViT Large (1): "))
+    vit_choice = 0# int(input("Use ViT Base (0) or ViT Large (1): "))
     hf_repo_vit = hf_repo_vit[vit_choice]
     if vit_choice == 1:
         large_vit=True
 
-    unfreeze_from_layer_vit = int(input("Unfreeze from layer ViT (0-11): "))
-    unfreeze_from_layer_txt = int(input("Unfreeze from layer DeBERTa (0-11): "))
+    unfreeze_from_layer_vit = 10# int(input("Unfreeze from layer ViT (0-11): "))
+    unfreeze_from_layer_txt = 10#int(input("Unfreeze from layer DeBERTa (0-11): "))
 
-    temp = float(input("Temperature for MAC Loss (0.04 - 0.07): "))
-    queue_size = int(input("Queue size for MAC Loss (1024 - 4096): "))
-    momentum = float(input("Momentum for MAC Loss encoders (0.99 - 0.999): "))
+    temp = 0.07#float(input("Temperature for MAC Loss (0.04 - 0.07): "))
+    queue_size = 2048 # int(input("Queue size for MAC Loss (1024 - 4096): "))
+    momentum = 0.995#float(input("Momentum for MAC Loss encoders (0.99 - 0.999): "))
 
     return FeatureExtraction(
         hf_repo_vit=hf_repo_vit,

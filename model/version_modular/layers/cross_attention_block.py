@@ -77,7 +77,7 @@ class CrossAttnBlock(nn.Module):
         z_it = self.mlp_it(z_it) + z_it
         z_it = self.l_i(z_it)
 
-        if z_m:
+        if z_m is not None:
             z_tm, _ = self.cross_attn_tm(z_t, z_m, z_m)
             z_tm = self.ln_tm(z_tm + z_t)
             z_tm = self.mlp_tm(z_tm) + z_tm
@@ -89,7 +89,7 @@ class CrossAttnBlock(nn.Module):
             z_total = z_it + z
 
         z = self.ln(z_total)
-        return z
+        return z, z_it
 
 
 def initialize_weights(module):
