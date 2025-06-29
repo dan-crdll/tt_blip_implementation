@@ -795,3 +795,5 @@ TT_BLIP
 *.json 
 *.jsonl
 *.pth
+
+fka/

@@ -2,7 +2,6 @@ from torch import nn
 import torch.nn.functional as F
 import torch 
 
-
 class GatedUnit(nn.Module):
     def __init__(self, embed_dim):
         super().__init__()
@@ -72,13 +71,13 @@ class CrossAttnBlock(nn.Module):
         z_t, _ = self.self_attn(z, z, z)
         z_t = self.ln_t(z_t + z)
 
-        z_it, _ = self.cross_attn_it(z_t, z_i, z_i)
+        z_it, attn_it = self.cross_attn_it(z_t, z_i, z_i)
         z_it = self.ln_it(z_it + z_t)
         z_it = self.mlp_it(z_it) + z_it
         z_it = self.l_i(z_it)
 
         if z_m is not None:
-            z_tm, _ = self.cross_attn_tm(z_t, z_m, z_m)
+            z_tm, attn_tm = self.cross_attn_tm(z_t, z_m, z_m)
             z_tm = self.ln_tm(z_tm + z_t)
             z_tm = self.mlp_tm(z_tm) + z_tm
             z_tm = self.l_m(z_tm)
@@ -89,7 +88,7 @@ class CrossAttnBlock(nn.Module):
             z_total = z_it + z
 
         z = self.ln(z_total)
-        return z, z_it
+        return z, z_it#, (attn_it, attn_tm)
 
 
 def initialize_weights(module):
@@ -112,10 +111,10 @@ def create_fusion_layer():
     print("##### FUSION LAYER CONFIGURATION #####")
 
     embed_dim = 768
-    num_heads = int(input("Cross attention heads: "))
-    hidden_dim = int(input("Cross attention hidden dim: "))
-    dropout = float(input("Cross attention dropout: "))
-    num_blocks = int(input("Number of cross attention blocks: "))
+    num_heads = 4#int(input("Cross attention heads: "))
+    hidden_dim = 512#int(input("Cross attention hidden dim: "))
+    dropout = 0.1#float(input("Cross attention dropout: "))
+    num_blocks = 6#int(input("Number of cross attention blocks: "))
 
     fusion_layer = nn.ModuleList([
             CrossAttnBlock(embed_dim, num_heads, hidden_dim, dropout)

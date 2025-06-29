@@ -1,8 +1,8 @@
 from model.version_modular.layers.feature_extraction import create_feature_extraction
 from model.version_modular.layers.cross_attention_block import create_fusion_layer
-from model.version_modular.efficient_architecture import Model
+from model.version_modular.efficient_architecture import Model, compute_eer
 from torch import nn 
-from model.version_modular.utils.more_efficient_load_data import DatasetLoader
+from model.version_modular.utils.fka_load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
@@ -13,6 +13,8 @@ import numpy as np
 import lightning as L
 from build_difficulty_dataset import create_difficulty_dataset
 from lightning.pytorch.callbacks import ModelCheckpoint
+from tqdm.auto import tqdm
+import torchmetrics
 
 
 class DGM4DataModule(L.LightningDataModule):
@@ -72,12 +74,13 @@ def create_classifiers(hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_lay
 
 
 def main():
+    split_train = 'washington_post'
     print("##### CONFIGURATION #####")
     
     lr = 1e-4#float(input("Learning rate (e.g., 1e-3): "))
     batch_size = 32#int(input("Batch size: "))
     epochs = 20#int(input("Epochs: "))
-    grad_acc = 16#int(input("Gradient accumulation: "))
+    grad_acc = 1#int(input("Gradient accumulation: "))
     gpus_input = "0"#input("GPUs (comma-separated, no spaces): ")
     grad_clip = 1.0#float(input("Gradient clipping: "))
     curriculum = 0#int(input("Use curriculum learning: Y (1) | N (0): "))
@@ -95,14 +98,29 @@ def main():
     origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
     manipulations = ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
 
-    if curriculum:
-            ds_loader = DatasetLoader(origins + manipulations, batch_size, True)
-            et = ds_loader.et 
-            datamodule = DGM4DataModule(ds_loader, et)
-    else:
-        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size, prefetch_factor=2).get_dataloaders()
-        et = None
-        datamodule = None
+    loader = DatasetLoader(
+        data_folder="./metadata_split/bbc",
+        batch_size=batch_size
+    )
+    _, bbc_dl = loader.get_dataloaders()
+
+    loader = DatasetLoader(
+        data_folder="./metadata_split/guardian",
+        batch_size=batch_size
+    )
+    _, guardian_dl = loader.get_dataloaders()
+
+    loader = DatasetLoader(
+        data_folder="./metadata_split/usa_today",
+        batch_size=batch_size
+    )
+    _, usa_today_dl = loader.get_dataloaders()
+
+    loader = DatasetLoader(
+        data_folder="./metadata_split/washington_post",
+        batch_size=batch_size
+    )
+    _, washington_post_dl = loader.get_dataloaders()
 
     feature_extraction_layer = create_feature_extraction()
     fusion_layer = create_fusion_layer()
@@ -113,81 +131,79 @@ def main():
     logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
     torch.set_float32_matmul_precision('high')
 
-    model = Model(
-        feature_extraction_layer,
-        fusion_layer,
-        bin_classifier,
-        multi_classifier,
-        lr,
-        et, 
-        blip,
-        datamodule,
-        False
+    model = Model.load_from_checkpoint("./Thesis_New/iuwpggb3/checkpoints/washington_post_trained_model.ckpt",
+        feature_extraction_layer=feature_extraction_layer,
+        fusion_layer=fusion_layer,
+        classifier_bin=bin_classifier,
+        classifier_multi=multi_classifier,
+        lr=lr,
+        epoch_tracker=None, 
+        use_blip=blip,
+        dataModule=None,
+        arcface=False
     )
-    model.feature_extraction.requires_grad_(False)
-    model.fusion_layer.requires_grad_(False)
-    for i in range(3):
-        model.fusion_layer[-i].requires_grad_(True)
+    model.eval()
+    device = model.device
 
-    ckpt_paths = [
-        "Thesis_New/ti00mt19/checkpoints/usa_today_trained_model.ckpt",
-        "Thesis_New/61wss5of/checkpoints/bbc_trained_model.ckpt",
-        "Thesis_New/39sgja98/checkpoints/guardian_trained_model.ckpt",
-        "Thesis_New/iuwpggb3/checkpoints/washington_post_trained_model.ckpt"
-    ]
+    accuracy = [[], [], [], []]
+    eer = [[], [], [], []]
+    auc = [[], [], [], []]
 
-    # Carica gli state_dict dei 4 modelli
-    state_dicts = []
-    for path in ckpt_paths:
-        print(f"Loading {path}")
-        ckpt = torch.load(path, map_location="cpu")
+    metrics = []
+    split = ['bbc', 'guardian', 'usa_today', 'washington_post']
+    for num, dl in enumerate([bbc_dl, guardian_dl, usa_today_dl, washington_post_dl]):
+        print(f"SPLIT {split[num]}")
+        for batch in tqdm(dl):
+            img, txt, (y_bin, y_multi), orig = batch
+
+            
+            # Move only the label tensors to device (img and txt are handled by the model)
+            y_bin = y_bin.to(device)
+            y_multi = y_multi.to(device)
+            
+            # Convert binary labels to integers for metrics that expect integer targets
+            y_bin_int = (y_bin > 0.5).long()  # Convert float labels to 0/1 integers
+
+            with torch.no_grad():
+                (p_bin, _), *_ = model(img, txt, orig, y_multi, "Val")
+
+                pred_bin_sigmoid = torch.sigmoid(p_bin)
+
+                accuracy[num].append(
+                    (pred_bin_sigmoid.round() == y_bin_int).float().mean().item()
+                )
+
+                eer[num].append(
+                    compute_eer(pred_bin_sigmoid, y_bin_int)
+                )
+
+                auc[num].append(
+                    torchmetrics.functional.auroc(pred_bin_sigmoid, y_bin_int, task="binary").item()
+                )
         
-        # Se è un Lightning checkpoint, prendi solo 'state_dict'
-        if "state_dict" in ckpt:
-            state_dicts.append(ckpt["state_dict"])
-        else:
-            state_dicts.append(ckpt)
+        metrics.append(
+            {
+                'Accuracy': np.mean(accuracy[num]),
+                'EER': np.mean(eer[num]),
+                'AUC': np.mean(auc[num]),
+            }
+        )
 
-    # Inizializza un dizionario per la media
-    avg_state_dict = {}
+        print(metrics[-1])
 
-    # Itera sulle chiavi (devono essere identiche in tutti i modelli)
-    for key in state_dicts[0].keys():
-        # Somma i tensori corrispondenti da ciascun modello
-        avg_state_dict[key] = sum(sd[key] for sd in state_dicts) / len(state_dicts)
 
-    print("Average State Dictionary Computed")
-    # gpus = [1]
-
-    model.load_state_dict(avg_state_dict)
-
-    print("Dictionary Loaded")
-    
-    checkpoint_callback = ModelCheckpoint(
-        filename="bbc_trained_model",
-        save_top_k=1,
-        monitor="Val/loss",
-        mode="min",
-    )
-    trainer = L.Trainer(
-        max_epochs=epochs, 
-        logger=logger, 
-        log_every_n_steps=1, 
-        precision='bf16-mixed', 
-        accumulate_grad_batches=grad_acc,
-        devices=gpus,
-        gradient_clip_val=grad_clip,
-        reload_dataloaders_every_n_epochs=curriculum,
-        callbacks=[checkpoint_callback]
-    )
-
-    if curriculum:
-        trainer.fit(model, datamodule=datamodule)
-    else:
-        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/6qlt1hqd/checkpoints/bbc_trained_model.ckpt') 
-
-    # torch.save(model.state_dict(), "./model_state_dict.pth")
-
+    with open(f"fka/fka_metrics_{split_train}.txt", 'w') as file:
+        for i, metric in enumerate(metrics):
+            print(f"Dataset: {split[i]}")
+            print(f"Accuracy: {metric['Accuracy']:.4f}")
+            print(f"EER: {metric['EER']:.4f}")
+            print(f"AUC: {metric['AUC']:.4f}")
+            print("-" * 30)
+            file.write(f"Dataset: {split[i]}\n")
+            file.write(f"Accuracy: {metric['Accuracy']:.4f}\n")
+            file.write(f"EER: {metric['EER']:.4f}\n")
+            file.write(f"AUC: {metric['AUC']:.4f}\n")
+            file.write("-" * 30 + "\n")
 
 if __name__ == "__main__":
     main()

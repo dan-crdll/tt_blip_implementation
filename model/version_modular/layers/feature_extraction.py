@@ -14,7 +14,7 @@ class ImageFeatureExtraction(nn.Module):
             self.proj = nn.Linear(1024, 768)
 
     def forward(self, x):
-        z_vit = self.vit(x)
+        z_vit, pixel_values = self.vit(x)
         if self.large:
             z_vit = self.proj(z_vit)
 
@@ -76,8 +76,8 @@ def create_feature_extraction():
     large_vit = False
     unfreeze_from_layer_vit = 0
     unfreeze_from_layer_txt = 0
-    temp = 0.07
-    queue_size = 1024
+    temp = 0.05
+    queue_size = 2048
     momentum = 0.999
 
     print("##### FEATURE EXTRACTION LAYER CONFIGURATION #####")
@@ -90,9 +90,9 @@ def create_feature_extraction():
     unfreeze_from_layer_vit = 10# int(input("Unfreeze from layer ViT (0-11): "))
     unfreeze_from_layer_txt = 10#int(input("Unfreeze from layer DeBERTa (0-11): "))
 
-    temp = 0.07#float(input("Temperature for MAC Loss (0.04 - 0.07): "))
+    temp = 0.05#float(input("Temperature for MAC Loss (0.04 - 0.07): "))
     queue_size = 2048 # int(input("Queue size for MAC Loss (1024 - 4096): "))
-    momentum = 0.995#float(input("Momentum for MAC Loss encoders (0.99 - 0.999): "))
+    momentum = 0.999#float(input("Momentum for MAC Loss encoders (0.99 - 0.999): "))
 
     return FeatureExtraction(
         hf_repo_vit=hf_repo_vit,

@@ -13,7 +13,7 @@ from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from model.version_3.layers.memory import Memory
 from model.version_3.utils.blip2_model import Blip2Model
-from model.version_modular.layers.box_detector import BoxDetector
+# from model.version_modular.layers.box_detector import BoxDetector
 
 
 
@@ -64,7 +64,7 @@ class Model(L.LightningModule):
 
         self.data_module = dataModule
 
-        self.box_detector = BoxDetector()
+        # self.box_detector = BoxDetector()
 
     def _init_metrics(self):
         # Binary classification metrics
@@ -77,9 +77,9 @@ class Model(L.LightningModule):
         self.val_cf1_multi = MultilabelF1Score(num_labels=4, average='macro')
         self.val_of1_multi = MultilabelF1Score(num_labels=4, average='micro')
         self.val_map_multi = MultilabelAveragePrecision(num_labels=4)
-        self.iou = IntersectionOverUnion()
-        self.iou50 = IntersectionOverUnion(iou_threshold=0.5)
-        self.iou75 = IntersectionOverUnion(iou_threshold=0.75)
+        # self.iou = IntersectionOverUnion()
+        # self.iou50 = IntersectionOverUnion(iou_threshold=0.5)
+        # self.iou75 = IntersectionOverUnion(iou_threshold=0.75)
         self.weight_decay = 0.02
 
     def load_partial_weights(self, checkpoint_path):
@@ -156,7 +156,7 @@ class Model(L.LightningModule):
     def forward(self, img, txt, orig, labels, split='Train'):
         
         # Unimodal features and contrastive loss
-        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt, orig, labels, split)
+        (z_i, z_t), contrastive_loss, pv = self.feature_extraction(img, txt, orig, labels, split)
 
         # Multimodal features and auxiliary moco loss
 
@@ -175,41 +175,48 @@ class Model(L.LightningModule):
         loss = contrastive_loss + 0.3 * clip_distance
 
         # Fusion via attention blocks
-        z = z_t
-        for k, layer in enumerate(self.fusion_layer):
-            z = layer(z, z_i, z_tm)
 
-        bbox = self.box_detector(z[:, 1:])
+        z = z_t
+
+        attn_it_list = []
+        attn_tm_list = []
+        
+        for k, layer in enumerate(self.fusion_layer):
+            z, _, (attn_it, attn_tm) = layer(z, z_i, z_tm)
+            attn_it_list.append(attn_it.detach().cpu())
+            attn_tm_list.append(attn_tm.detach().cpu())
+
+        # bbox = self.box_detector(z[:, 1:])
         z = z[:, 0]
 
         # Classification
         y_bin = self.classifier_bin(z).squeeze(-1)
         y_multi = self.classifier_multi(z)
-        return (y_bin, y_multi, bbox), loss, (z_i, z_t)
+        return (y_bin, y_multi), loss, (z_i, z_t, z), (attn_it_list, attn_tm_list, pv)
 
-    def _iou(self, pred_boxes, target_boxes):
-        # pred_boxes, target_boxes: [B, 4] in format (x1, y1, x2, y2)
+    # def _iou(self, pred_boxes, target_boxes):
+    #     # pred_boxes, target_boxes: [B, 4] in format (x1, y1, x2, y2)
 
-        # Intersection
-        x1 = torch.max(pred_boxes[:, 0], target_boxes[:, 0])
-        y1 = torch.max(pred_boxes[:, 1], target_boxes[:, 1])
-        x2 = torch.min(pred_boxes[:, 2], target_boxes[:, 2])
-        y2 = torch.min(pred_boxes[:, 3], target_boxes[:, 3])
+    #     # Intersection
+    #     x1 = torch.max(pred_boxes[:, 0], target_boxes[:, 0])
+    #     y1 = torch.max(pred_boxes[:, 1], target_boxes[:, 1])
+    #     x2 = torch.min(pred_boxes[:, 2], target_boxes[:, 2])
+    #     y2 = torch.min(pred_boxes[:, 3], target_boxes[:, 3])
 
-        inter = (x2 - x1).clamp(min=0) * (y2 - y1).clamp(min=0)
+    #     inter = (x2 - x1).clamp(min=0) * (y2 - y1).clamp(min=0)
 
-        # Union
-        area_pred = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
-        area_gt = (target_boxes[:, 2] - target_boxes[:, 0]) * (target_boxes[:, 3] - target_boxes[:, 1])
-        union = area_pred + area_gt - inter + 1e-6
+    #     # Union
+    #     area_pred = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
+    #     area_gt = (target_boxes[:, 2] - target_boxes[:, 0]) * (target_boxes[:, 3] - target_boxes[:, 1])
+    #     union = area_pred + area_gt - inter + 1e-6
 
-        return inter / union
+    #     return inter / union
 
-    def iou_loss(self, pred_boxes, target_boxes):
-        return 1 - self._iou(pred_boxes, target_boxes).mean()
+    # def iou_loss(self, pred_boxes, target_boxes):
+    #     return 1 - self._iou(pred_boxes, target_boxes).mean()
 
     def _step(self, split, batch):
-        img, txt, (y_bin, y_multi, bbox), orig = batch
+        img, txt, (y_bin, y_multi, _), orig = batch
         (pred_bin, pred_multi, pred_bbox), c_loss, (z_img_b, z_txt_b) = self(img, txt, orig, y_multi, split)
 
         # --- Standard Feed Forward Pass --- 
@@ -217,7 +224,7 @@ class Model(L.LightningModule):
         multi_loss = self.loss_fn_multi(pred_multi, y_multi.float())
         pred_bbox = F.sigmoid(pred_bbox)
 
-        bbox_loss = torch.norm(pred_bbox - bbox).mean() + self.iou_loss(pred_bbox, bbox)
+        # bbox_loss = torch.norm(pred_bbox - bbox).mean() + self.iou_loss(pred_bbox, bbox)
 
         pred_bbox = [{
             "boxes": pred_bbox[i, :].unsqueeze(0),

@@ -2,7 +2,7 @@ from model.version_modular.layers.feature_extraction import create_feature_extra
 from model.version_modular.layers.cross_attention_block import create_fusion_layer
 from model.version_modular.efficient_architecture import Model
 from torch import nn 
-from model.version_modular.utils.more_efficient_load_data import DatasetLoader
+from model.version_modular.utils.fka_load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
 from dgm4_download import download_dgm4
@@ -13,6 +13,7 @@ import numpy as np
 import lightning as L
 from build_difficulty_dataset import create_difficulty_dataset
 from lightning.pytorch.callbacks import ModelCheckpoint
+import sys
 
 
 class DGM4DataModule(L.LightningDataModule):
@@ -71,14 +72,14 @@ def create_classifiers(hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_lay
     return nn.Sequential(*bin_layers), nn.Sequential(*multi_layers)
 
 
-def main():
+def main(split, gpus):
     print("##### CONFIGURATION #####")
     
     lr = 1e-4#float(input("Learning rate (e.g., 1e-3): "))
     batch_size = 32#int(input("Batch size: "))
     epochs = 20#int(input("Epochs: "))
-    grad_acc = 16#int(input("Gradient accumulation: "))
-    gpus_input = "0"#input("GPUs (comma-separated, no spaces): ")
+    grad_acc = 1#int(input("Gradient accumulation: "))
+    gpus_input = "0, 1"#input("GPUs (comma-separated, no spaces): ")
     grad_clip = 1.0#float(input("Gradient clipping: "))
     curriculum = 0#int(input("Use curriculum learning: Y (1) | N (0): "))
     num_layers_bin = 3#int(input("Number of layers for binary classifier: "))
@@ -89,20 +90,19 @@ def main():
 
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus_input
     gpus = [int(gpu) for gpu in gpus_input.split(",")]
-
+    # gpus = int(gpus)
+    
     seed_everything()
-
     origins = ['washington_post', 'bbc', 'usa_today', 'guardian']
     manipulations = ['simswap', 'StyleCLIP', 'infoswap', 'HFGI']
 
-    if curriculum:
-            ds_loader = DatasetLoader(origins + manipulations, batch_size, True)
-            et = ds_loader.et 
-            datamodule = DGM4DataModule(ds_loader, et)
-    else:
-        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size, prefetch_factor=2).get_dataloaders()
-        et = None
-        datamodule = None
+    loader = DatasetLoader(
+        data_folder=f"./metadata_split/{split}",
+        batch_size=batch_size
+    )
+
+
+    train_dl, val_dl = loader.get_dataloaders()
 
     feature_extraction_layer = create_feature_extraction()
     fusion_layer = create_fusion_layer()
@@ -119,55 +119,17 @@ def main():
         bin_classifier,
         multi_classifier,
         lr,
-        et, 
+        None, 
         blip,
-        datamodule,
+        None,
         False
     )
-    model.feature_extraction.requires_grad_(False)
-    model.fusion_layer.requires_grad_(False)
-    for i in range(3):
-        model.fusion_layer[-i].requires_grad_(True)
 
-    ckpt_paths = [
-        "Thesis_New/ti00mt19/checkpoints/usa_today_trained_model.ckpt",
-        "Thesis_New/61wss5of/checkpoints/bbc_trained_model.ckpt",
-        "Thesis_New/39sgja98/checkpoints/guardian_trained_model.ckpt",
-        "Thesis_New/iuwpggb3/checkpoints/washington_post_trained_model.ckpt"
-    ]
-
-    # Carica gli state_dict dei 4 modelli
-    state_dicts = []
-    for path in ckpt_paths:
-        print(f"Loading {path}")
-        ckpt = torch.load(path, map_location="cpu")
-        
-        # Se è un Lightning checkpoint, prendi solo 'state_dict'
-        if "state_dict" in ckpt:
-            state_dicts.append(ckpt["state_dict"])
-        else:
-            state_dicts.append(ckpt)
-
-    # Inizializza un dizionario per la media
-    avg_state_dict = {}
-
-    # Itera sulle chiavi (devono essere identiche in tutti i modelli)
-    for key in state_dicts[0].keys():
-        # Somma i tensori corrispondenti da ciascun modello
-        avg_state_dict[key] = sum(sd[key] for sd in state_dicts) / len(state_dicts)
-
-    print("Average State Dictionary Computed")
-    # gpus = [1]
-
-    model.load_state_dict(avg_state_dict)
-
-    print("Dictionary Loaded")
-    
     checkpoint_callback = ModelCheckpoint(
-        filename="bbc_trained_model",
+        filename=f"{split}_trained_model",
         save_top_k=1,
-        monitor="Val/loss",
-        mode="min",
+        monitor="Val/acc_bin",
+        mode="max",
     )
     trainer = L.Trainer(
         max_epochs=epochs, 
@@ -175,19 +137,26 @@ def main():
         log_every_n_steps=1, 
         precision='bf16-mixed', 
         accumulate_grad_batches=grad_acc,
-        devices=gpus,
+        devices=len(gpus) if isinstance(gpus, list) else 1,
         gradient_clip_val=grad_clip,
         reload_dataloaders_every_n_epochs=curriculum,
-        callbacks=[checkpoint_callback]
+        callbacks=[checkpoint_callback],
+        strategy="ddp" if (isinstance(gpus, list) and len(gpus) > 1) else "auto",
     )
 
     if curriculum:
         trainer.fit(model, datamodule=datamodule)
     else:
-        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/6qlt1hqd/checkpoints/bbc_trained_model.ckpt') 
+        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/jp4bj7eb/checkpoints/epoch=3-step=816.ckpt') 
 
     # torch.save(model.state_dict(), "./model_state_dict.pth")
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 2:
+        split = sys.argv[1]
+        gpu = sys.argv[2]
+    else:
+        split = 'bbc'
+        gpu = 0
+    main(split, gpu)

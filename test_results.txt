@@ -1,0 +1,7 @@
+Binary Accuracy: 0.8197
+Binary F1 Score: 0.8580
+Binary AUROC: 0.9055
+Multilabel Accuracy: 0.9014
+Multilabel Macro F1: 0.7432
+Multilabel Micro F1: 0.7219
+Multilabel mAP: 0.8484

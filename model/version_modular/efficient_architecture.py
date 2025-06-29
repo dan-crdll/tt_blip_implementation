@@ -15,6 +15,64 @@ from model.version_3.layers.memory import Memory
 from model.version_3.utils.blip2_model import Blip2Model
 from model.version_modular.layers.box_detector import BoxDetector
 
+import torch
+import numpy as np
+from sklearn.metrics import roc_curve
+from scipy.interpolate import interp1d
+from scipy.optimize import brentq
+import numpy as np
+from sklearn.metrics import roc_curve
+from scipy.optimize import brentq
+from scipy.interpolate import interp1d
+
+def compute_eer(y_scores, y_true):
+    # Assicurati di lavorare su cpu e numpy
+    y_true = y_true.detach().float().cpu().numpy()
+    y_scores = y_scores.detach().float().cpu().numpy()
+    y_true = np.round(y_true).astype(int)
+    
+    # Controlli di validità
+    if len(np.unique(y_true)) < 2:
+        return 0.5  # Se tutti i label sono uguali, EER = 0.5
+    
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label=1)
+    fnr = 1 - tpr
+    
+    # Controllo per valori NaN o infiniti
+    if np.any(np.isnan(fpr)) or np.any(np.isnan(tpr)) or np.any(np.isinf(fpr)) or np.any(np.isinf(tpr)):
+        return 0.5
+    
+    # Rimuovi duplicati e ordina
+    unique_fpr, unique_indices = np.unique(fpr, return_index=True)
+    unique_tpr = tpr[unique_indices]
+    
+    # Se abbiamo troppo pochi punti unici
+    if len(unique_fpr) < 2:
+        return 0.5
+    
+    try:
+        # Interpolazione con controllo del dominio
+        interp_func = interp1d(unique_fpr, unique_tpr, kind='linear', 
+                              bounds_error=False, fill_value=(unique_tpr[0], unique_tpr[-1]))
+        
+        # Trova EER usando brentq
+        def eer_func(x):
+            return 1.0 - x - interp_func(x)
+        
+        # Controlla che la funzione sia valida agli estremi
+        if np.isnan(eer_func(0.0)) or np.isnan(eer_func(1.0)):
+            # Fallback: calcola EER come minima distanza tra FPR e FNR
+            eer_idx = np.argmin(np.abs(fpr - fnr))
+            return (fpr[eer_idx] + fnr[eer_idx]) / 2.0
+        
+        eer = brentq(eer_func, 0., 1.)
+        return eer
+        
+    except (ValueError, RuntimeError):
+        # Fallback: calcola EER come minima distanza tra FPR e FNR
+        eer_idx = np.argmin(np.abs(fpr - fnr))
+        return (fpr[eer_idx] + fnr[eer_idx]) / 2.0
+
 
 class Model(L.LightningModule):
     def __init__(
@@ -26,7 +84,8 @@ class Model(L.LightningModule):
         lr=1e-5, 
         epoch_tracker=None,
         use_blip=1,
-        dataModule=None
+        dataModule=None,
+        arcface=True
         ):
         super().__init__()
 
@@ -40,13 +99,27 @@ class Model(L.LightningModule):
         self.fusion_layer = fusion_layer
 
         # -- Classification Head --
-        self.classifier_bin = classifier_bin
+        if arcface:
+            from model.version_modular.utils.arcface import ArcMarginProduct
+
+            self.head = nn.Sequential(
+                nn.Linear(768, 1024),
+                nn.ReLU(),
+                nn.Linear(1024, 768),
+                nn.ReLU()
+            )
+            self.classifier_bin = ArcMarginProduct(768, 2)
+        else:
+            self.classifier_bin = classifier_bin
         self.classifier_multi = classifier_multi
 
         # -- Loss Functions (precompiled) --
-        self.loss_fn_bin = nn.BCEWithLogitsLoss(reduction='mean')
+        if arcface:
+            self.loss_fn_bin = nn.CrossEntropyLoss()
+        else:
+            self.loss_fn_bin = nn.BCEWithLogitsLoss(reduction='mean')
         self.loss_fn_multi = nn.BCEWithLogitsLoss(reduction='mean')
-
+        self.arcface = arcface
         # -- Log Variance for Uncertainty Weighting --
         self.dist_loss = DistanceLoss()
         self.lr = lr
@@ -57,7 +130,6 @@ class Model(L.LightningModule):
         self.num = 0
         self.epoch_tracker = epoch_tracker
         self.data_module = dataModule
-        self.box_detector = BoxDetector()
         
         # Optimization: Cache weight decay parameters
         self.weight_decay = 0.02
@@ -75,11 +147,6 @@ class Model(L.LightningModule):
         self.val_of1_multi = MultilabelF1Score(num_labels=4, average='micro')
         self.val_map_multi = MultilabelAveragePrecision(num_labels=4)
         
-        # IoU metrics with optimized settings
-        self.iou = IntersectionOverUnion()
-        self.iou50 = IntersectionOverUnion(iou_threshold=0.5)
-        self.iou75 = IntersectionOverUnion(iou_threshold=0.75)
-
     def load_partial_weights(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
         state_dict = checkpoint['state_dict']
@@ -158,39 +225,10 @@ class Model(L.LightningModule):
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
-    @torch.jit.script_if_tracing
-    def _iou_vectorized(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor) -> torch.Tensor:
-        """Optimized vectorized IoU computation"""
-        # Intersection coordinates
-        inter_coords = torch.stack([
-            torch.max(pred_boxes[:, 0], target_boxes[:, 0]),  # x1
-            torch.max(pred_boxes[:, 1], target_boxes[:, 1]),  # y1
-            torch.min(pred_boxes[:, 2], target_boxes[:, 2]),  # x2
-            torch.min(pred_boxes[:, 3], target_boxes[:, 3])   # y2
-        ], dim=1)
-        
-        # Intersection area
-        inter_wh = (inter_coords[:, 2:] - inter_coords[:, :2]).clamp(min=0)
-        inter = inter_wh[:, 0] * inter_wh[:, 1]
 
-        # Box areas
-        pred_wh = pred_boxes[:, 2:] - pred_boxes[:, :2]
-        target_wh = target_boxes[:, 2:] - target_boxes[:, :2]
-        
-        area_pred = pred_wh[:, 0] * pred_wh[:, 1]
-        area_target = target_wh[:, 0] * target_wh[:, 1]
-        
-        # Union area
-        union = area_pred + area_target - inter + 1e-6
-
-        return inter / union
-
-    def iou_loss(self, pred_boxes, target_boxes):
-        return 1 - self._iou_vectorized(pred_boxes, target_boxes).mean()
-
-    def forward(self, img, txt, orig, labels, split='Train'):
+    def forward(self, img, txt, orig, labels, bin_labels, split='Train'):
         # Unimodal features and contrastive loss
-        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt, orig, labels, split)
+        (z_i, z_t), contrastive_loss = self.feature_extraction(img, txt, orig, labels, 'Val')
 
         # Multimodal features and auxiliary loss
         if self.use_blip:
@@ -212,50 +250,36 @@ class Model(L.LightningModule):
         for layer in self.fusion_layer:
             z, z_it = layer(z, z_i, z_tm)
 
-        bbox = self.box_detector(z_it[:, 1:])
         z = z[:, 0]
 
         # Classification
-        y_bin = self.classifier_bin(z).squeeze(-1)
+        if self.arcface:
+            z_bin = self.head(z)
+            y_bin = self.classifier_bin(z_bin, bin_labels)
+        else:
+            y_bin = self.classifier_bin(z).squeeze(-1)
         y_multi = self.classifier_multi(z)
         
-        return (y_bin, y_multi), bbox, loss, (z_i, z_t)
-
-    def _prepare_bbox_format(self, bbox_tensor):
-        """Prepare bbox in required format for metrics"""
-        return [{
-            "boxes": bbox_tensor[i, :].unsqueeze(0),
-            "labels": torch.tensor([0], device=self.device, dtype=torch.long)
-        } for i in range(bbox_tensor.shape[0])]
+        return (y_bin, y_multi), loss, (z_i, z_t)
 
     def _step(self, split, batch):
-        img, txt, (y_bin, y_multi, bbox), orig = batch
-        (pred_bin, pred_multi), pred_bbox, c_loss, (z_img_b, z_txt_b) = self(
-            img, txt, orig, y_multi, split
+        img, txt, (y_bin, y_multi), orig = batch
+        (pred_bin, pred_multi), c_loss, (z_img_b, z_txt_b) = self(
+            img, txt, orig, y_multi, y_bin, split
         )
 
         # Compute losses in parallel where possible
-        bin_loss = self.loss_fn_bin(pred_bin, y_bin.float())
+        bin_loss = self.loss_fn_bin(pred_bin, y_bin.long().squeeze(-1) if self.arcface else y_bin.float())
         multi_loss = self.loss_fn_multi(pred_multi, y_multi.float())
-        
-        # Apply sigmoid once and reuse
-        pred_bbox_sigmoid = torch.sigmoid(pred_bbox)
-        
-        # Optimized bbox loss computation
-        bbox_loss = (
-            F.mse_loss(pred_bbox_sigmoid, bbox, reduction='mean') + 
-            self.iou_loss(pred_bbox_sigmoid, bbox)
-        )
-
-        total_loss = 0.1 * c_loss + bin_loss + multi_loss + bbox_loss
+                
+        total_loss = 0.1 * c_loss + bin_loss + multi_loss
 
         # Efficient logging
         log_dict = {
             f"{split}/loss": total_loss,
             f"{split}/loss_bin": bin_loss,
             f"{split}/loss_multi": multi_loss,
-            f"{split}/contrastive_loss": c_loss,
-            f"{split}/bbox_loss": bbox_loss,
+            f"{split}/contrastive_loss": c_loss
         }
         
         # Get batch size from appropriate input
@@ -275,12 +299,14 @@ class Model(L.LightningModule):
             batch_size=batch_size
         )
 
+        pred_bin_sigmoid = torch.sigmoid(pred_bin) if not self.arcface else torch.argmax(torch.softmax(pred_bin, -1), -1).float().squeeze(-1)
+        pred_multi_sigmoid = torch.sigmoid(pred_multi)
+        self.log(f"{split}/EER", compute_eer(pred_bin_sigmoid, y_bin), on_step=(split=='Train'), on_epoch=True)
+
+
         # Validation metrics (computed only when needed)
         if split == 'Val':
-            with torch.no_grad():  # Ensure no gradients for validation metrics
-                pred_bin_sigmoid = torch.sigmoid(pred_bin)
-                pred_multi_sigmoid = torch.sigmoid(pred_multi)
-                
+            with torch.no_grad():  # Ensure no gradients for validation metrics                
                 # Update binary metrics
                 self.val_acc_bin.update(pred_bin_sigmoid, y_bin)
                 self.val_f1_bin.update(pred_bin_sigmoid, y_bin)
@@ -292,14 +318,6 @@ class Model(L.LightningModule):
                 self.val_of1_multi.update(pred_multi_sigmoid, y_multi)
                 self.val_map_multi.update(pred_multi_sigmoid, y_multi.long())
                 
-                # Update IoU metrics
-                pred_bbox_format = self._prepare_bbox_format(pred_bbox_sigmoid)
-                bbox_format = self._prepare_bbox_format(bbox)
-                
-                self.iou.update(pred_bbox_format, bbox_format)
-                self.iou50.update(pred_bbox_format, bbox_format)
-                self.iou75.update(pred_bbox_format, bbox_format)
-
         return total_loss
 
     def on_train_epoch_start(self):
@@ -333,9 +351,6 @@ class Model(L.LightningModule):
             "Val/cf1_multi": self.val_cf1_multi.compute(),
             "Val/of1_multi": self.val_of1_multi.compute(),
             "Val/mAP_multi": self.val_map_multi.compute(),
-            "Val/IoU": self.iou.compute()['iou'],
-            "Val/IoU50": self.iou50.compute()['iou'],
-            "Val/IoU75": self.iou75.compute()['iou'],
         }
         
         self.log_dict(val_metrics, prog_bar=True, sync_dist=True)
@@ -344,8 +359,9 @@ class Model(L.LightningModule):
         metrics_to_reset = [
             self.val_acc_bin, self.val_f1_bin, self.val_auc_bin,
             self.val_acc_multi, self.val_cf1_multi, self.val_of1_multi, self.val_map_multi,
-            self.iou, self.iou50, self.iou75
         ]
         
         for metric in metrics_to_reset:
             metric.reset()
+
+

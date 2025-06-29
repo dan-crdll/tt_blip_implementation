@@ -652,7 +652,7 @@ class DatasetLoader:
         multi_labels = torch.stack(multi_labels)
         bboxes = torch.cat(bboxes, dim=0)
         
-        y = (labels, multi_labels, bboxes)
+        y = (labels, multi_labels)
         return images, texts, y, (original_images, original_txts)
 
     def collate_fn_aug(self, batch):
@@ -677,7 +677,7 @@ class DatasetLoader:
         multi_labels = torch.stack(multi_labels)
         bboxes = torch.cat(bboxes, dim=0)
         
-        y = (labels, multi_labels, bboxes)
+        y = (labels, multi_labels)
         return images, texts, y, (original_images, original_txts)
 
     def get_dataloaders(self):

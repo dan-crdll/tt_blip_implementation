@@ -5,7 +5,7 @@ class ViT(nn.Module):
     def __init__(self, hf_repo, device='cpu', unfreeze_from_layer=0):
         super().__init__()
         self.device = device
-        self.vit = ViTModel.from_pretrained(hf_repo, output_hidden_states=False)
+        self.vit = ViTModel.from_pretrained(hf_repo, output_hidden_states=True)
         self.processor = ViTImageProcessor.from_pretrained(hf_repo)
 
         # Freeze all layers, then unfreeze from specified encoder block
@@ -19,14 +19,19 @@ class ViT(nn.Module):
     def forward(self, image):
         inputs = self.processor(image, return_tensors='pt')
         pixel_values = inputs['pixel_values'].to(self.device, non_blocking=True)
-        outputs = self.vit(pixel_values=pixel_values).last_hidden_state
-        return outputs   # (batch, seq_length, hidden_size)
+        outputs = self.vit(pixel_values=pixel_values).hidden_states 
+        
+        # Take the average of the last three hidden states
+        last_three = outputs[-3:]  # list of tensors
+        avg_hidden = sum(last_three) / 3
+
+        return avg_hidden, pixel_values   # (batch, seq_length, hidden_size)
 
 
 class TextEncoder(nn.Module):
     def __init__(self, hf_repo, device='cpu', unfreeze_from_layer=0, n_layers=6):
         super().__init__()
-        self.encoder = DebertaV2Model.from_pretrained(hf_repo, output_hidden_states=False)
+        self.encoder = DebertaV2Model.from_pretrained(hf_repo, output_hidden_states=True)
         self.tokenizer = DebertaV2Tokenizer.from_pretrained(hf_repo, use_fast=False)
         self.n_layers = n_layers
 
@@ -41,9 +46,12 @@ class TextEncoder(nn.Module):
 
 
     def forward(self, text):
-        inputs = self.tokenizer(text, return_tensors='pt', padding=True, truncation=True)
+        inputs = self.tokenizer(text, return_tensors='pt', padding=True)
         input_ids = inputs['input_ids'].to(self.device, non_blocking=True)
         attention_mask = inputs['attention_mask'].to(self.device, non_blocking=True)
-        z = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        z = self.encoder(input_ids=input_ids, attention_mask=attention_mask).hidden_states 
 
-        return z
+        last_three = z[-3:]  # list of tensors
+        avg_hidden = sum(last_three) / 3
+
+        return avg_hidden
