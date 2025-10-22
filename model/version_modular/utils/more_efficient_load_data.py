@@ -653,7 +653,7 @@ class DatasetLoader:
         bboxes = torch.cat(bboxes, dim=0)
         
         y = (labels, multi_labels)
-        return images, texts, y, (original_images, original_txts)
+        return images, texts, y, (original_images, original_txts), (bboxes)
 
     def collate_fn_aug(self, batch):
         """Optimized augmented collate function"""
@@ -678,7 +678,7 @@ class DatasetLoader:
         bboxes = torch.cat(bboxes, dim=0)
         
         y = (labels, multi_labels)
-        return images, texts, y, (original_images, original_txts)
+        return images, texts, y, (original_images, original_txts), (bboxes)
 
     def get_dataloaders(self):
         """Create optimized data loaders"""
@@ -695,7 +695,7 @@ class DatasetLoader:
             self.train_dataset, 
             batch_size=self.batch_size, 
             sampler=train_sampler,
-            collate_fn=self.collate_fn_aug,
+            collate_fn=self.collate_fn_aug, # TODO: Fatto senza augmentations
             num_workers=self.num_workers,
             pin_memory=True,
             prefetch_factor=self.prefetch_factor,

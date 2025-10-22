@@ -13,6 +13,7 @@ import numpy as np
 import lightning as L
 from build_difficulty_dataset import create_difficulty_dataset
 from lightning.pytorch.callbacks import ModelCheckpoint
+from tqdm.auto import tqdm
 
 
 class DGM4DataModule(L.LightningDataModule):
@@ -71,6 +72,7 @@ def create_classifiers(hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_lay
     return nn.Sequential(*bin_layers), nn.Sequential(*multi_layers)
 
 
+@torch.no_grad()
 def main():
     print("##### CONFIGURATION #####")
     
@@ -122,72 +124,88 @@ def main():
         et, 
         blip,
         datamodule,
-        False,
-        bbox_img=True
+        False
     )
     model.feature_extraction.requires_grad_(False)
-    # model.fusion_layer.requires_grad_(False)
-    # for i in range(3):
-    #     model.fusion_layer[-i].requires_grad_(True)
+    model.fusion_layer.requires_grad_(False)
 
-    # ckpt_paths = [
-    #     "Thesis_New/ti00mt19/checkpoints/usa_today_trained_model.ckpt",
-    #     "Thesis_New/61wss5of/checkpoints/bbc_trained_model.ckpt",
-    #     "Thesis_New/39sgja98/checkpoints/guardian_trained_model.ckpt",
-    #     "Thesis_New/iuwpggb3/checkpoints/washington_post_trained_model.ckpt"
-    # ]
+    ckpt_paths = [
+        "Thesis_New/ti00mt19/checkpoints/usa_today_trained_model.ckpt",
+        "Thesis_New/61wss5of/checkpoints/bbc_trained_model.ckpt",
+        "Thesis_New/39sgja98/checkpoints/guardian_trained_model.ckpt",
+        "Thesis_New/iuwpggb3/checkpoints/washington_post_trained_model.ckpt"
+    ]
 
-    # # Carica gli state_dict dei 4 modelli
-    # state_dicts = []
-    # for path in ckpt_paths:
-    #     print(f"Loading {path}")
-    #     ckpt = torch.load(path, map_location="cpu")
+    # Carica gli state_dict dei 4 modelli
+    state_dicts = []
+    for path in ckpt_paths:
+        print(f"Loading {path}")
+        ckpt = torch.load(path, map_location="cpu")
         
-    #     # Se è un Lightning checkpoint, prendi solo 'state_dict'
-    #     if "state_dict" in ckpt:
-    #         state_dicts.append(ckpt["state_dict"])
-    #     else:
-    #         state_dicts.append(ckpt)
+        # Se è un Lightning checkpoint, prendi solo 'state_dict'
+        if "state_dict" in ckpt:
+            state_dicts.append(ckpt["state_dict"])
+        else:
+            state_dicts.append(ckpt)
 
-    # # Inizializza un dizionario per la media
-    # avg_state_dict = {}
+    # Inizializza un dizionario per la media
+    avg_state_dict = {}
+    final_state_dict = {}
+    acc = 0
+    num = 1
+    # Itera sulle chiavi (devono essere identiche in tutti i modelli)
+    for idx, sd in enumerate(state_dicts):
+        for key in state_dicts[0].keys():
+            if acc == 0:
+                if sd[key].dtype in (torch.float32, torch.float64):
+                    avg_state_dict[key] = sd[key].clone().float()
+                else:
+                    avg_state_dict[key] = sd[key].clone()
+            else:
+                if avg_state_dict[key].dtype in (torch.float32, torch.float64):
+                    avg_state_dict[key] += sd[key].float() / num
 
-    # # Itera sulle chiavi (devono essere identiche in tutti i modelli)
-    # for key in state_dicts[0].keys():
-    #     # Somma i tensori corrispondenti da ciascun modello
-    #     avg_state_dict[key] = sum(sd[key] for sd in state_dicts) / len(state_dicts)
+            
+        model.load_state_dict(avg_state_dict)
+        model.to('cuda:0')
 
-    # print("Average State Dictionary Computed")
-    # # gpus = [1]
+        fin_acc = []
+        for b in tqdm(val_dl):
+            img, txt, (y_bin, y_multi), orig = b
+            (pred_bin, pred_multi), c_loss, (z_img_b, z_txt_b) = model(
+                img, txt, orig, y_multi, y_bin, "Val"
+            )
 
-    # model.load_state_dict(avg_state_dict, strict=False)
+            pred_bin = pred_bin.to('cpu')
+            y_bin = y_bin.to('cpu')
+            torch.cuda.empty_cache()
+            # Compute binary accuracy
+            pred_bin_labels = (pred_bin.sigmoid() > 0.5).long().squeeze()
+            y_bin_labels = y_bin.long().squeeze()
+            bin_acc = (pred_bin_labels == y_bin_labels).float().mean().item()
+            fin_acc.append(bin_acc)
 
-    # print("Dictionary Loaded")
-    
-    # checkpoint_callback = ModelCheckpoint(
-    #     filename="bbc_trained_model",
-    #     save_top_k=1,
-    #     monitor="Val/loss",
-    #     mode="min",
-    # )
-    trainer = L.Trainer(
-        max_epochs=epochs, 
-        logger=logger, 
-        log_every_n_steps=1, 
-        precision='bf16-mixed', 
-        accumulate_grad_batches=grad_acc,
-        devices=gpus,
-        gradient_clip_val=grad_clip,
-        reload_dataloaders_every_n_epochs=curriculum,
-        # callbacks=[checkpoint_callback]
-    )
+        bin_acc = sum(fin_acc) / len(fin_acc)
+        print(f"Accuracy: {bin_acc}")
+        if bin_acc > acc:
+            print(f"{ckpt_paths[idx]} added to the states")
+            acc = bin_acc
 
-    if curriculum:
-        trainer.fit(model, datamodule=datamodule)
-    else:
-        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/6qlt1hqd/checkpoints/bbc_trained_model.ckpt') 
+            for key in state_dicts[0].keys():
+                final_state_dict[key] = avg_state_dict[key].clone()
 
-    # torch.save(model.state_dict(), "./model_state_dict.pth")
+            num += 1
+
+        avg_state_dict = final_state_dict
+                
+                
+
+    print("Average State Dictionary Computed")
+
+
+    torch.save(final_state_dict, "./final_state_dict_greedy_soup.ckpt")
+
+    print("Dictionary Loaded")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ from torch import nn
 from model.version_modular.utils.more_efficient_load_data import DatasetLoader
 from lightning.pytorch.loggers import WandbLogger
 import torch
+from torch.utils.data import Dataset, random_split, DataLoader
+from torchvision import transforms
 from dgm4_download import download_dgm4
 import yaml
 import random
@@ -13,6 +15,8 @@ import numpy as np
 import lightning as L
 from build_difficulty_dataset import create_difficulty_dataset
 from lightning.pytorch.callbacks import ModelCheckpoint
+import pandas as pd
+from PIL import Image
 
 
 class DGM4DataModule(L.LightningDataModule):
@@ -76,8 +80,8 @@ def main():
     
     lr = 1e-4#float(input("Learning rate (e.g., 1e-3): "))
     batch_size = 32#int(input("Batch size: "))
-    epochs = 20#int(input("Epochs: "))
-    grad_acc = 16#int(input("Gradient accumulation: "))
+    epochs = 2000#int(input("Epochs: "))
+    grad_acc = 1#int(input("Gradient accumulation: "))
     gpus_input = "0"#input("GPUs (comma-separated, no spaces): ")
     grad_clip = 1.0#float(input("Gradient clipping: "))
     curriculum = 0#int(input("Use curriculum learning: Y (1) | N (0): "))
@@ -100,7 +104,149 @@ def main():
             et = ds_loader.et 
             datamodule = DGM4DataModule(ds_loader, et)
     else:
-        train_dl, val_dl = DatasetLoader(origins + manipulations, batch_size, prefetch_factor=2).get_dataloaders()
+        train_dl, val_dl_1 = DatasetLoader(origins + manipulations, batch_size, prefetch_factor=2).get_dataloaders()
+        x_txt = []
+        x_img = []
+
+        y_bin = []
+        y_multi = []
+
+        path = "./VERITE/image-text-verification/VERITE"
+        csv_file = f"{path}/VERITE.csv"
+
+        # Caricamento dati
+        csv_file = pd.read_csv(csv_file, keep_default_na=False)
+        csv_file = csv_file.to_dict(orient="records")
+
+        x_txt = []
+        x_img = []
+        y_bin = []
+        y_multi = []
+
+        for row in csv_file:
+            try:
+                x_img.append(Image.open(f"{path}/{row['image_path']}"))
+                x_txt.append(row['caption'])
+                
+                if row['label'] == 'true':
+                    y_bin.append(torch.tensor(0.0))
+                    y_multi.append(torch.tensor([1, 0, 0, 0]).long())
+                else:
+                    y_bin.append(torch.tensor(1.0))
+                    if row['label'] == 'miscaptioned':
+                        y_multi.append(torch.tensor([0, 1, 0, 0]).long())
+                    else:
+                        y_multi.append(torch.tensor([0, 0, 1, 0]).long())
+            except:
+                pass
+
+
+        # Dataset personalizzato
+        class MultimodalDataset(Dataset):
+            def __init__(self, images, texts, y_bin, y_multi, transform=None):
+                self.images = images
+                self.texts = texts
+                self.y_bin = y_bin
+                self.y_multi = y_multi
+                self.transform = transform
+            
+            def __len__(self):
+                return len(self.images)
+            
+            def __getitem__(self, idx):
+                img = self.images[idx]
+                txt = self.texts[idx]
+                y_b = self.y_bin[idx]
+                y_m = self.y_multi[idx]
+                
+                # Immagine originale (senza transform)
+                orig = img.copy()
+                
+                # Immagine con transform
+                if self.transform:
+                    img = self.transform(img)
+                
+                return {
+                    'image': img,
+                    'text': txt,
+                    'label': y_b,
+                    'multi_label': y_m,
+                    'orig_image': orig,
+                    'orig_text': txt  # Stessa caption per originale
+                }
+
+
+        # Definizione delle trasformazioni (SENZA normalizzazione)
+        # La normalizzazione dovrebbe essere fatta dal tuo model processor
+        train_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            # NON convertiamo in tensor qui - lasciamo come PIL Image
+        ])
+
+        val_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            # NON convertiamo in tensor qui - lasciamo come PIL Image
+        ])
+
+
+        # Creazione dataset completo
+        full_dataset = MultimodalDataset(x_img, x_txt, y_bin, y_multi)
+
+        full_dataset.transform = val_transform
+
+
+        # Funzione collate personalizzata (formato DGM4)
+        def collate_fn(batch):
+            """
+            Collate function che restituisce:
+            images, texts, (labels, multi_labels), (original_images, original_txts), (bboxes)
+            
+            Images e original_images sono PIL Images - la conversione a tensor
+            e normalizzazione sarà fatta dal processor del modello.
+            """
+            images = []
+            texts = []
+            labels = []
+            multi_labels = []
+            original_images = []
+            original_txts = []
+            
+            for item in batch:
+                images.append(item['image'])  # PIL Image con augmentation
+                texts.append(item['text'])
+                labels.append(item['label'])
+                multi_labels.append(item['multi_label'])
+                original_images.append(item['orig_image'])  # PIL Image senza augmentation
+                original_txts.append(item['orig_text'])
+            
+            # Stack solo le labels (che sono già tensor)
+            labels = torch.stack(labels)
+            multi_labels = torch.stack(multi_labels)
+            
+            # Bboxes vuote (non disponibili in questo dataset)
+            bboxes = torch.zeros(len(batch), 4, dtype=torch.float)
+            
+            y = (labels, multi_labels)
+            
+            # images e original_images restano come liste di PIL Images
+            return images, texts, y, (original_images, original_txts), (bboxes)
+
+
+        # Creazione DataLoader
+
+        val_dl_2 = DataLoader(
+            full_dataset,
+            batch_size=32,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=True,
+            collate_fn=collate_fn,
+            drop_last=True
+        )
+
         et = None
         datamodule = None
 
@@ -110,7 +256,7 @@ def main():
         hidden_dim_bin, hidden_dim_multi, num_layers_bin, num_layers_multi
     )
 
-    logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
+    logger = WandbLogger('VERITE', project="Thesis_New")
     torch.set_float32_matmul_precision('high')
 
     model = Model(
@@ -125,7 +271,7 @@ def main():
         False,
         bbox_img=True
     )
-    model.feature_extraction.requires_grad_(False)
+    # model.feature_extraction.requires_grad_(False)
     # model.fusion_layer.requires_grad_(False)
     # for i in range(3):
     #     model.fusion_layer[-i].requires_grad_(True)
@@ -185,7 +331,7 @@ def main():
     if curriculum:
         trainer.fit(model, datamodule=datamodule)
     else:
-        trainer.fit(model, train_dl, val_dl)#, ckpt_path='Thesis_New/6qlt1hqd/checkpoints/bbc_trained_model.ckpt') 
+        trainer.fit(model, train_dl, val_dl_1)#, ckpt_path='Thesis_New/6qlt1hqd/checkpoints/bbc_trained_model.ckpt') 
 
     # torch.save(model.state_dict(), "./model_state_dict.pth")
 

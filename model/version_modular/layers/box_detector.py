@@ -7,22 +7,27 @@ class BoxDetector(nn.Module):
         super().__init__()
 
         self.lpaa = nn.MultiheadAttention(embed_dim, 16, batch_first=True)
-        self.agg_token = nn.Parameter(torch.randn(1, embed_dim), requires_grad=True)
+        self.agg_token = nn.Parameter(torch.zeros(1, 1, embed_dim), requires_grad=True)
 
         self.bbox_detector = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 4)
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 5),
+            nn.Sigmoid()
         )
+        
 
     def forward(self, z):
         BSZ, *_ = z.shape
-        agg_token = self.agg_token.repeat(BSZ, 1).unsqueeze(1)
+        agg_token = self.agg_token.repeat(BSZ, 1, 1)
 
         z = nn.functional.layer_norm(z, z.shape[-1:])
         agg_token = nn.functional.layer_norm(agg_token, agg_token.shape[-1:])
 
-        agg_token, _ = self.lpaa(agg_token, z, z)
+        agg_token, _ = self.lpaa(agg_token, z[:, 1:], z[:, 1:])
+
         agg_token = agg_token.squeeze(1)
         y = self.bbox_detector(agg_token)
         return y

@@ -67,12 +67,12 @@ class CrossAttnBlock(nn.Module):
 
 
 
-    def forward(self, z, z_i, z_m):
+    def forward(self, z, z_i, z_m, just_ca=False):
         z_t, _ = self.self_attn(z, z, z)
         z_t = self.ln_t(z_t + z)
 
-        z_it, attn_it = self.cross_attn_it(z_t, z_i, z_i)
-        z_it = self.ln_it(z_it + z_t)
+        z_it_, attn_it = self.cross_attn_it(z_t, z_i, z_i)
+        z_it = self.ln_it(z_it_ + z_t)
         z_it = self.mlp_it(z_it) + z_it
         z_it = self.l_i(z_it)
 
@@ -88,7 +88,10 @@ class CrossAttnBlock(nn.Module):
             z_total = z_it + z
 
         z = self.ln(z_total)
-        return z, z_it#, (attn_it, attn_tm)
+        if just_ca:
+            return z, z_it, z_it_
+        else:
+            return z, z_it#, (attn_it, attn_tm)
 
 
 def initialize_weights(module):
