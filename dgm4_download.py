@@ -17,9 +17,9 @@ def download_dgm4(
     os.makedirs('./data/DGM4/origin', exist_ok=True)
 
     def download_and_extract(url, extract_path, name):
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=360)
         with open(f"{path}/{name}.zip", 'wb') as fp:
-            for chunk in response.iter_content(chunk_size=1024):
+            for chunk in response.iter_content(chunk_size=1024*1024):
                 fp.write(chunk)
         with zipfile.ZipFile(f"{path}/{name}.zip", "r") as zp:
             zp.extractall(extract_path)

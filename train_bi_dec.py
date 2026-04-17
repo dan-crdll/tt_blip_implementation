@@ -41,7 +41,18 @@ def main(num_heads, hidden_dim, trainable, epochs, batch_size, grad_acc, origins
             trainable=-trainable
         )
 
-    logger = WandbLogger('BI_DEC_DGM4', project="Thesis_New")
+    logger = WandbLogger('BI_DEC_DGM4_all', project="BiDEC")
+    logger.experiment.config.update({
+        "num_heads": num_heads,
+        "hidden_dim": hidden_dim,
+        "trainable": trainable,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "grad_acc": grad_acc,
+        "origins": origins,
+        "manipulations": manipulations,
+        "comments": "Training on DGM4 with CLIP instead of BLIP. Training 5 layers of BER and ViT, keeping BLIP_txt and BLIP_img frozen. Using Encoder after BLIP. Contrastive loss before fusion"
+    })
 
     torch.set_float32_matmul_precision('high')
     trainer = Trainer(
