@@ -12,7 +12,8 @@ from model.version_3.utils.loss_fn import DistanceLoss, FocalLoss, AutomaticWeig
 from model.version_3.layers.feature_extraction import FeatureExtraction
 from model.version_3.layers.cross_attention_block import CrossAttnBlock
 from model.version_3.layers.memory import Memory
-from model.version_3.utils.blip2_model import Blip2Model
+from model.version_modular.utils.blip2_model import Blip2Model
+from model.version_modular.utils.multimodal_models import SigClip, FlavaModelWrapper
 from model.version_modular.layers.box_detector import BoxDetector
 
 import numpy as np
@@ -120,7 +121,8 @@ class Model(L.LightningModule):
         dataModule=None,
         arcface=True,
         bbox_img=False,
-        bbox_txt=False
+        bbox_txt=False,
+        multimodal_model = None
         ):
         super().__init__()
 
@@ -128,7 +130,12 @@ class Model(L.LightningModule):
         self.feature_extraction = feature_extraction_layer
         self.use_blip = use_blip
         if use_blip:
-            self.multimodal_feature_extraction = Blip2Model("Salesforce/blip-itm-base-coco")
+            if multimodal_model == "flava":
+                self.multimodal_feature_extraction = FlavaModelWrapper("facebook/flava-full")
+            elif multimodal_model == "sigclip":
+                self.multimodal_feature_extraction = SigClip("google/siglip2-base-patch32-256x")
+            else:
+                self.multimodal_feature_extraction = Blip2Model("Salesforce/blip-itm-base-coco")
 
         # -- Cross-Attention Fusion Layers --
         self.fusion_layer = fusion_layer
